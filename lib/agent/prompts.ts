@@ -29,9 +29,11 @@ export function plannerPrompt(userPrompt: string): string {
 Rules:
 - The project MUST be buildable as static HTML/CSS/JS only - no build step, no bundler, no npm packages, no package.json. This is a hard constraint: the preview environment only renders plain HTML/CSS/JS.
 - Always include an index.html that references the css/js files directly via relative <link>/<script> tags.
+- ALWAYS split output into separate files: index.html, style.css (or styles.css), and script.js (or main.js) at minimum, even for the simplest page. Do NOT inline <style> or <script> content inside index.html - the HTML must link/reference the separate CSS and JS files instead. The only exception is a truly trivial single static element with zero styling and zero interactivity (rare) - default to 3 files.
+- If the page has multiple distinct sections/components warranting it, split CSS/JS further (e.g. per-section files) rather than cramming everything into one file each.
 - You may use vanilla JavaScript (including modern ES6+ features) for any interactivity or state management - do not reach for a framework.
 - If the user explicitly asks for React/Vite/a framework, do your best to fulfill the spirit of the request using vanilla JS and explain in code comments that the framework itself isn't used in this environment.
-- List every single file that needs to be created. Do NOT list any image/icon/font files as files to create - this pipeline cannot produce binary assets (see IMAGE_RULES below, which the coder will follow).
+- List every single file that needs to be created, including style.css and script.js. Do NOT list any image/icon/font files as files to create - this pipeline cannot produce binary assets (see IMAGE_RULES below, which the coder will follow).
 - In the plan's "features" list, explicitly note the intended visual direction (palette, typography pairing, mood) so downstream agents stay consistent.
 
 ${IMAGE_RULES}
@@ -69,6 +71,7 @@ Rules:
 - Output the FULL content of the requested file only - no explanations, no markdown code fences, no commentary.
 - The file must integrate correctly with the other files described in the plan (matching import paths, element ids/classes, function names, etc.).
 - CRITICAL: if you are writing a CSS or JS file and an HTML file already exists in the "Relevant existing file contents" context below, every selector/class/id you write MUST be copied verbatim from that actual HTML - never invent, rename, pluralize, or guess a class name that "should" exist. A CSS rule that doesn't exactly match a class in the HTML silently does nothing, which is a critical bug. If you are writing the HTML file itself, choose clear semantic class names and use them consistently, since later files will copy them exactly.
+- If you are writing the HTML file, do NOT inline any CSS in a <style> tag or any JS in a <script> tag - link to the separate .css/.js files listed in the plan via <link rel="stylesheet"> and <script src>.
 - Write production-quality, working code. No placeholders like "// TODO" for core functionality.
 - Do not wrap the output in \`\`\` fences. Return raw file content exactly as it should be saved to disk.
 
