@@ -1,120 +1,73 @@
 import Link from "next/link";
-import { ClipboardList, Compass, Code2, ShieldCheck, Link2 } from "lucide-react";
 import Navbar from "@/components/Navbar";
-import Gear from "@/components/clockwork/Gear";
-import GearCluster from "@/components/clockwork/GearCluster";
-import BuildDial from "@/components/clockwork/BuildDial";
+import AuthAura from "@/components/auth/AuthAura";
 import { getCurrentUser } from "@/lib/actions/auth";
-import { getUsageStatus } from "@/lib/actions/rate-limit";
-
-const AGENTS = [
-  {
-    title: "Planner",
-    body: "Breaks your prompt into a concrete task list before a line of code is written.",
-    icon: ClipboardList,
-  },
-  {
-    title: "Architect",
-    body: "Designs the file structure and component boundaries the build will follow.",
-    icon: Compass,
-  },
-  {
-    title: "Coder",
-    body: "Writes every file in sequence, streaming progress live as it goes.",
-    icon: Code2,
-  },
-  {
-    title: "Self-QA",
-    body: "Reviews its own output and patches issues before handing back a working preview.",
-    icon: ShieldCheck,
-  },
-];
 
 export default async function LandingPage() {
   const user = await getCurrentUser();
-  const usage = user ? await getUsageStatus(user.uid) : null;
-  const used = usage?.generate.used ?? 1;
-  const limit = usage?.generate.limit ?? 20;
 
   return (
-    <div className="clockwork-stage relative min-h-screen overflow-hidden">
-      {/* Etched grid + vignette backdrop */}
-      <div className="clockwork-grid" />
-      <div className="clockwork-vignette" />
-
-      {/* Corner gear clusters — real rotating SVG cogs, not an image */}
-      <GearCluster className="absolute -left-16 -top-10" opacity={0.9} />
-      <GearCluster className="absolute -bottom-24 -right-16" flip opacity={0.55} />
+    <div className="relative min-h-screen overflow-hidden bg-void">
+      {/* Background animation — untouched, same AuthAura as before */}
+      <div className="absolute inset-0 h-[900px]">
+        <AuthAura />
+      </div>
+      {/* Glitch Drop overlay: CRT scanlines drifting above the aurora
+          background, below the content */}
+      <div className="glitch-drop-scanlines" />
 
       <div className="relative z-10">
         <Navbar />
 
-        <main className="mx-auto max-w-4xl px-6 py-24 text-center">
-          <span className="clockwork-pill animate-fade-up mx-auto mb-6">
+        <main className="mx-auto max-w-4xl px-6 py-28 text-center">
+          <span className="glitch-drop-pill animate-fade-up mx-auto mb-6">
             <i />
             Now streaming builds file-by-file
           </span>
 
-          <h1 className="clockwork-h1 animate-fade-up mx-auto text-4xl sm:text-6xl [animation-delay:80ms]">
-            <span className="c-line gold">Imagine it.</span>
-            <span className="c-line cream">
-              <b>Srizva</b> builds it.
+          <h1 className="glitch-drop-h1 animate-fade-up mx-auto text-4xl sm:text-6xl [animation-delay:80ms]">
+            <span className="g-line" data-text="Imagine it.">
+              Imagine it.
             </span>
+            <span className="g-line accent">Srizva builds it.</span>
           </h1>
-
-          <p className="clockwork-body animate-fade-up mx-auto mt-6 max-w-xl text-base sm:text-lg [animation-delay:160ms]">
+          <p className="glitch-drop-body animate-fade-up mx-auto mt-6 max-w-xl text-lg [animation-delay:160ms]">
             An AI agent plans the project, breaks it into tasks, and writes
             every file - with a live, running preview right in your browser.
             No local setup required.
           </p>
 
           <div className="animate-fade-up mt-10 flex items-center justify-center gap-4 [animation-delay:240ms]">
-            <Link href={user ? "/dashboard" : "/sign-up"} className="clockwork-cta">
+            <Link
+              href={user ? "/dashboard" : "/sign-up"}
+              className="glitch-drop-cta"
+            >
               {user ? "Go to dashboard" : "Start building - it's free"}
             </Link>
           </div>
 
-          {/* Instrument strip: build dial flanked by the pipeline's pace */}
-          <div className="clockwork-strip animate-fade-up mx-auto mt-16 flex max-w-2xl items-center gap-6 px-6 py-6 [animation-delay:300ms] sm:gap-10 sm:px-10">
-            <BuildDial used={used} limit={limit} size={104} />
-
-            <div className="flex-1 space-y-4 text-left">
-              <div className="flex items-start gap-3">
-                <span className="clockwork-icon-badge mt-0.5 h-8 w-8 shrink-0">
-                  <Link2 size={15} strokeWidth={2.5} />
-                </span>
-                <p className="clockwork-body text-sm leading-snug text-clockwork-cream/80">
-                  Every planning decision streams to you in real time.
-                </p>
-              </div>
-              <div className="flex items-start gap-3">
-                <span className="clockwork-icon-badge mt-0.5 h-8 w-8 shrink-0 overflow-hidden">
-                  <Gear teeth={8} size={22} duration="14s" tone="gold" spokes={0} />
-                </span>
-                <p className="clockwork-body text-sm leading-snug text-clockwork-cream/80">
-                  Each task runs in order, one file at a time.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Agent pipeline cards */}
-          <div className="mt-14 grid gap-6 text-left sm:grid-cols-2 lg:grid-cols-4">
-            {AGENTS.map((agent, i) => (
+          <div className="mt-20 grid gap-6 text-left sm:grid-cols-3">
+            {[
+              {
+                title: "1. Describe it",
+                body: "\"A todo app with dark mode\" or \"a pricing page for my SaaS\" - plain English is enough.",
+              },
+              {
+                title: "2. Watch it build",
+                body: "A Planner, Architect, and Coder agent work in sequence, streaming progress file by file.",
+              },
+              {
+                title: "3. Preview & ship",
+                body: "See it running live in-browser instantly, then download the code or keep iterating.",
+              },
+            ].map((step, i) => (
               <div
-                key={agent.title}
-                className="clockwork-card animate-fade-up p-6"
-                style={{ animationDelay: `${360 + i * 90}ms` }}
+                key={step.title}
+                className="animate-fade-up rounded-xl border border-white/10 bg-surface/60 p-6 backdrop-blur-sm transition-colors hover:border-white/20"
+                style={{ animationDelay: `${320 + i * 90}ms` }}
               >
-                <span className="clockwork-icon-badge mb-4">
-                  <agent.icon size={17} strokeWidth={2.4} />
-                </span>
-                <h3 className="font-glitch-display font-semibold uppercase tracking-wide text-clockwork-gold-light">
-                  {agent.title}
-                </h3>
-                <p className="clockwork-body mt-2 text-sm text-clockwork-cream/70">
-                  {agent.body}
-                </p>
+                <h3 className="font-semibold">{step.title}</h3>
+                <p className="mt-2 text-sm text-muted">{step.body}</p>
               </div>
             ))}
           </div>
