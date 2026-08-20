@@ -1,4 +1,12 @@
-import type { FileSystemTree } from "@webcontainer/api";
+// Local stand-in for @webcontainer/api's FileSystemTree — this file is
+// only ever used browser-side against an actual WebContainer instance,
+// but it doesn't need the real package as a dependency just for a type.
+type FileSystemTree = {
+  [name: string]:
+      | { file: { contents: string | Uint8Array } }
+      | { directory: FileSystemTree }
+      | { file: { symlink: string } };
+};
 import type { VirtualFS } from "@/lib/agent/types";
 
 // Tiny zero-dependency static file server, injected only when the
@@ -38,7 +46,11 @@ export function buildFileSystemTree(files: VirtualFS): {
   runCommand: { cmd: string; args: string[] };
 } {
   const hasPackageJson = Object.keys(files).some((p) => p.endsWith("package.json"));
-  const tree: FileSystemTree = {};
+  // Built as a loosely-typed working structure, then cast to
+  // FileSystemTree on return — sidesteps a strict-mode false positive
+  // where TS can't disambiguate the two "file" node shapes (contents vs.
+  // symlink) when assigning through a dynamic index.
+  const tree: Record<string, unknown> = {};
 
   for (const [filePath, content] of Object.entries(files)) {
     const parts = filePath.split("/").filter(Boolean);
@@ -46,10 +58,11 @@ export function buildFileSystemTree(files: VirtualFS): {
 
     for (let i = 0; i < parts.length - 1; i++) {
       const dir = parts[i];
-      if (!cursor[dir] || !("directory" in cursor[dir])) {
+      const existing = cursor[dir] as { directory?: Record<string, unknown> } | undefined;
+      if (!existing || !existing.directory) {
         cursor[dir] = { directory: {} };
       }
-      cursor = (cursor[dir] as { directory: FileSystemTree }).directory;
+      cursor = (cursor[dir] as { directory: Record<string, unknown> }).directory;
     }
 
     cursor[parts[parts.length - 1]] = { file: { contents: content } };
@@ -60,10 +73,10 @@ export function buildFileSystemTree(files: VirtualFS): {
   }
 
   return {
-    tree,
+    tree: tree as FileSystemTree,
     hasPackageJson,
     runCommand: hasPackageJson
-      ? { cmd: "npm", args: ["run", "dev"] }
-      : { cmd: "node", args: ["server.mjs"] },
+        ? { cmd: "npm", args: ["run", "dev"] }
+        : { cmd: "node", args: ["server.mjs"] },
   };
 }
