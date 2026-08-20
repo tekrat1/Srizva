@@ -11,6 +11,7 @@ import { selectRelevantContext } from "../nodes/context";
 import { validateProject } from "../nodes/validate";
 import { runFinalReview } from "../nodes/finalReview";
 import { AgentState, type AgentStateType, type AgentEventEmitter, type ValidationIssue } from "./state";
+import { buildFastPlan, buildFastTaskPlan, isSimpleProjectRequest } from "../complexity";
 
 const MAX_REPAIR_ATTEMPTS = Number(process.env.SRIZVA_MAX_REPAIR_ATTEMPTS || 2);
 const generationCheckpointer = new MemorySaver();
@@ -39,6 +40,21 @@ export function createGenerationGraph(emit: AgentEventEmitter) {
     .addNode("requirements", async (state: AgentStateType) => {
       emit({ type: "status", message: "Understanding requirements..." });
       return { iteration: state.iteration + 1 };
+    })
+    .addNode("fastPlan", async (state: AgentStateType) => {
+      const plan = buildFastPlan(state.userRequest);
+      const taskPlan = buildFastTaskPlan(plan, state.userRequest);
+      emit({ type: "status", message: "Simple project detected — using fast build path." });
+      emit({ type: "plan", plan });
+      emit({ type: "task_plan", taskPlan });
+      return {
+        fastPath: true,
+        plan,
+        taskPlan,
+        tasks: taskPlan.implementation_steps,
+        currentTaskIndex: 0,
+        currentTask: taskPlan.implementation_steps[0] ?? null,
+      };
     })
     .addNode("planner", async (state: AgentStateType) => {
       emit({ type: "status", message: "Planning your project..." });
@@ -98,7 +114,7 @@ export function createGenerationGraph(emit: AgentEventEmitter) {
         task.task_description,
         state.files,
         dependencyGraph,
-        6500
+        state.fastPath ? 4000 : 6500
       );
       emit({
         type: "status",
@@ -135,7 +151,8 @@ export function createGenerationGraph(emit: AgentEventEmitter) {
         state.files,
         onRetry,
         isRepair ? state.files[task.filepath] ?? null : null,
-        state.relevantContext
+        state.relevantContext,
+        state.fastPath ? 4000 : 8000
       );
 
       const files: VirtualFS = { ...state.files };
@@ -269,7 +286,12 @@ export function createGenerationGraph(emit: AgentEventEmitter) {
 
   graph
     .addEdge(START, "requirements")
-    .addEdge("requirements", "planner")
+    .addConditionalEdges("requirements", (state: AgentStateType) =>
+      isSimpleProjectRequest(state.userRequest) ? "fastPlan" : "planner", {
+        fastPlan: "fastPlan",
+        planner: "planner",
+      })
+    .addEdge("fastPlan", "context")
     .addEdge("planner", "architect")
     .addEdge("architect", "context")
     .addEdge("context", "coder")
@@ -294,7 +316,7 @@ export function createGenerationGraph(emit: AgentEventEmitter) {
         validate: "validate",
       })
     .addConditionalEdges("validate", (state: AgentStateType) => {
-      if (state.validationIssues.length === 0) return "finalReview";
+      if (state.validationIssues.length === 0) return state.fastPath ? "finish" : "finalReview";
       const issue = state.validationIssues[0];
       const attempts = state.repairAttempts[issue.path] ?? 0;
       if (attempts >= MAX_REPAIR_ATTEMPTS) return "fail";

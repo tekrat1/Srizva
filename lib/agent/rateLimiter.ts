@@ -1,61 +1,58 @@
 /**
- * Proactive sliding-window budget for Groq's rate limits (TPM + RPM).
+ * Provider-aware sliding-window rate limiter for Srizva.
  *
- * The old approach was a flat 1500ms sleep between files, then just firing
- * the next call and letting withGroqRetry (see retry.ts) eat a full 429
- * backoff (5-16s+, per Groq's own suggested wait) whenever that guess was
- * wrong. On the free/on-demand tier (8000 TPM for openai/gpt-oss-120b as
- * of mid-2026 - see console.groq.com/docs/rate-limits for current
- * numbers), a single coder call's system prompt + context + completion
- * budget is often already close to the entire per-minute cap, so that
- * guess was wrong on a lot of files - the 429 retries, not the
- * intentional pacing, were the dominant cost of a "slow" build.
+ * Groq enforces organization-level RPM/TPM (and on some accounts separate
+ * input/output limits). A multi-agent build can otherwise spend most of the
+ * minute's allowance in one request and then get a 429 halfway through the
+ * next file.
  *
- * This tracks actual token/request usage in a trailing 60s window and, before
- * firing a call, waits only as long as it takes for enough of that window to
- * age out to fit the call - zero wait when there's headroom, and never a
- * wasted round trip that was always going to 429.
+ * This limiter:
+ * - reserves budget BEFORE every LLM call;
+ * - uses a safety margin so estimation error does not cross the provider cap;
+ * - queues concurrent calls in this Node process;
+ * - waits for the oldest reservation to expire instead of firing a request
+ *   that is guaranteed to 429;
+ * - emits a wait callback so the UI can show "waiting for rate limit" rather
+ *   than looking stuck;
+ * - never waits forever when one call cannot fit inside the configured TPM.
  *
- * Configurable via env so this scales with your actual Groq tier instead of
- * assuming everyone is on the free tier forever - see .env.local.example.
+ * IMPORTANT: this protects one server process. For horizontally scaled
+ * deployments, the provider's own 429/retry headers remain the final source
+ * of truth. The retry layer handles those too.
  */
 
 import { AI_PROVIDER } from "./groq";
 
-// .env.local.example ships these keys BLANK (e.g. "GROQ_TPM_LIMIT="). If that
-// line is left as-is, process.env.GROQ_TPM_LIMIT is "" - not undefined - so
-// the "?? 8000" fallback never kicks in and Number("") silently evaluates to
-// 0. A 0 budget means every single call looks "over budget" forever, so
-// reserveGroqBudget() spins in its wait loop indefinitely. Guard explicitly
-// against "", so a blank/unset env var always falls back to the tier default.
 function envNumber(value: string | undefined, fallback: number): number {
   if (!value || value.trim() === "") return fallback;
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-// Per-provider free-tier defaults for openai/gpt-oss-120b (see groq.ts for
-// the full comparison). GROQ_TPM_LIMIT/GROQ_RPM_LIMIT env vars still
-// override either provider's default directly, if you know your account's
-// real numbers differ (e.g. a paid tier on either side).
 const DEFAULTS = {
+  // Current Groq free-plan base limit for GPT-OSS models is 8K TPM.
+  // Keep this configurable because the exact organization limit can differ.
   groq: { tpm: 8000, rpm: 30 },
+  // Conservative fallback for optional Cerebras usage. Override with env.
   cerebras: { tpm: 30000, rpm: 5 },
 } as const;
-const providerDefaults = DEFAULTS[AI_PROVIDER];
 
+const providerDefaults = DEFAULTS[AI_PROVIDER];
 const TPM_LIMIT = envNumber(process.env.GROQ_TPM_LIMIT, providerDefaults.tpm);
 const RPM_LIMIT = envNumber(process.env.GROQ_RPM_LIMIT, providerDefaults.rpm);
+const SAFETY_RATIO = Math.min(
+  0.98,
+  Math.max(0.60, envNumber(process.env.SRIZVA_TPM_SAFETY_RATIO, 0.85))
+);
+const EFFECTIVE_TPM_LIMIT = Math.max(1, Math.floor(TPM_LIMIT * SAFETY_RATIO));
 const WINDOW_MS = 60_000;
 
 interface LogEntry {
+  /** Reserved token budget for this call. */
   tokens: number;
   at: number;
 }
 
-// Module-level (per server process) - intentionally not per-request, since
-// the limit is enforced by Groq at the organization/API-key level, not per
-// user session.
 const usageLog: LogEntry[] = [];
 
 function sleep(ms: number) {
@@ -63,7 +60,9 @@ function sleep(ms: number) {
 }
 
 function pruneOld(now: number) {
-  while (usageLog.length && now - usageLog[0].at > WINDOW_MS) usageLog.shift();
+  while (usageLog.length && now - usageLog[0].at >= WINDOW_MS) {
+    usageLog.shift();
+  }
 }
 
 function tokensInWindow(now: number): number {
@@ -71,58 +70,91 @@ function tokensInWindow(now: number): number {
   return usageLog.reduce((sum, e) => sum + e.tokens, 0);
 }
 
+export interface ReserveOptions {
+  onWait?: (waitMs: number, usedTokens: number, limitTokens: number) => void;
+}
+
 /**
- * Waits until firing a call estimated at `estimatedTokens` won't exceed
- * either the TPM or RPM budget in the trailing 60s window, then reserves
- * the slot immediately (so back-to-back calls queue correctly instead of
- * all passing the check at once).
+ * Reserve a slot for an estimated request.
  *
- * Returns a `settle` function - call it with the call's real total token
- * usage once the request completes, so the reservation reflects what
- * actually happened rather than the pre-call estimate.
+ * `estimatedTokens` should include prompt + requested completion budget.
+ * The reservation is intentionally conservative. Once the call completes,
+ * `settle()` replaces the reservation with actual usage.
  */
 export async function reserveGroqBudget(
-  estimatedTokens: number
+  estimatedTokens: number,
+  options: ReserveOptions = {}
 ): Promise<(actualTokens: number) => void> {
+  const estimate = Math.max(1, Math.ceil(estimatedTokens));
+
+  // A single request larger than the configured effective window can never
+  // fit. Do not spin forever waiting for a window that can never be large
+  // enough; tell the caller to lower context/output or raise the provider cap.
+  if (estimate > EFFECTIVE_TPM_LIMIT) {
+    throw new Error(
+      `This AI request needs about ${estimate.toLocaleString()} tokens, but the configured safe per-minute limit is ${EFFECTIVE_TPM_LIMIT.toLocaleString()}. ` +
+      `Reduce project context/output or increase GROQ_TPM_LIMIT if your provider account allows it.`
+    );
+  }
+
   for (;;) {
     const now = Date.now();
     const used = tokensInWindow(now);
-    const overTokens = used + estimatedTokens > TPM_LIMIT;
+    const overTokens = used + estimate > EFFECTIVE_TPM_LIMIT;
     const overRequests = usageLog.length + 1 > RPM_LIMIT;
 
     if (!overTokens && !overRequests) {
-      const entry: LogEntry = { tokens: estimatedTokens, at: now };
+      const entry: LogEntry = { tokens: estimate, at: now };
       usageLog.push(entry);
+
       return (actualTokens: number) => {
-        entry.tokens = actualTokens;
+        // Never allow the local reservation to under-report a call. If the
+        // provider reports more usage than estimated, keep the larger value
+        // until it ages out of the window.
+        entry.tokens = Math.max(1, Math.ceil(actualTokens || estimate));
       };
     }
 
-    // Wait until the oldest entry ages out of the window, plus a small
-    // buffer so we don't race the boundary.
     const oldest = usageLog[0];
-    const waitMs = oldest ? Math.max(0, WINDOW_MS - (now - oldest.at)) + 150 : 1000;
+    const waitForTokens = overTokens && oldest
+      ? Math.max(250, WINDOW_MS - (now - oldest.at) + 250)
+      : 0;
+    const waitForRequests = overRequests && oldest
+      ? Math.max(250, WINDOW_MS - (now - oldest.at) + 250)
+      : 0;
+    const waitMs = Math.max(waitForTokens, waitForRequests, 500);
+
+    options.onWait?.(waitMs, used, EFFECTIVE_TPM_LIMIT);
     await sleep(waitMs);
   }
 }
 
-/** ~4 chars/token is the same conservative estimate already used elsewhere (coder.ts, edit.ts). */
+/**
+ * Conservative code token estimate. Code tends to tokenize less efficiently
+ * than normal English, so 3 chars/token is safer than the old 4 chars/token
+ * estimate when reserving a hard provider limit.
+ */
 export function estimateTokens(...texts: (string | undefined | null)[]): number {
-  return Math.ceil(texts.reduce((sum, t) => sum + (t?.length ?? 0), 0) / 4);
+  return Math.max(
+    1,
+    Math.ceil(texts.reduce((sum, t) => sum + (t?.length ?? 0), 0) / 3)
+  );
 }
 
-/**
- * Clamps a token estimate between a floor and a ceiling.
- *
- * reserveGroqBudget() above charges a call's `maxTokens` against the TPM
- * cap up front, before the real completion length is known - so a flat
- * worst-case `maxTokens` on every call (regardless of how small the
- * actual task is) reserves way more budget than it needs, and that
- * over-reservation is what forces later calls to sit out a big chunk of
- * the 60s window even on a trivially small project. Call sites use this
- * to size `maxTokens` to the task at hand instead: small tasks reserve a
- * small slot (and finish fast), big tasks still get the full ceiling.
- */
-export function clampTokenBudget(estimate: number, floor: number, ceiling: number): number {
+export function clampTokenBudget(
+  estimate: number,
+  floor: number,
+  ceiling: number
+): number {
   return Math.max(floor, Math.min(ceiling, Math.round(estimate)));
+}
+
+export function getRateLimitConfig() {
+  return {
+    provider: AI_PROVIDER,
+    tpmLimit: TPM_LIMIT,
+    rpmLimit: RPM_LIMIT,
+    safetyRatio: SAFETY_RATIO,
+    effectiveTpmLimit: EFFECTIVE_TPM_LIMIT,
+  };
 }

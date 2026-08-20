@@ -145,3 +145,22 @@ Open http://localhost:3000, sign up, and try a prompt like:
 - Password strength checks on sign-up
 - Deleting/renaming projects, shareable public preview links
 - Smarter context selection for the coder step on very large projects (current approach sends full file content up to a ~40k character budget, which covers small/medium projects but will start truncating on bigger ones)
+
+
+## Token-efficient generation
+
+Srizva now uses a deterministic complexity router before the agent graph:
+
+- **Simple static requests** (Todo, Pomodoro, timer, landing page, etc.) use a fast path: deterministic plan → file-by-file coder → deterministic QA → finish.
+- **Medium/complex requests** keep the full Planner → Architect → Context → Coder → QA → repair → final review workflow.
+- GPT-OSS reasoning defaults to **low** effort. Set `AI_REASONING_EFFORT=medium` or `high` only when deeper reasoning is worth the extra quota.
+- The coder receives dependency-ranked context instead of the entire project.
+- Deterministic QA runs before any LLM repair.
+- `finishReason === "length"` is treated as a generation failure and triggers a bounded regeneration.
+
+This reduces unnecessary LLM calls and context/reasoning usage; it does not increase the provider's actual quota.
+
+
+## AI rate-limit protection
+
+Set `AI_PROVIDER=groq` and configure `GROQ_TPM_LIMIT` / `GROQ_RPM_LIMIT` to match your provider dashboard. `SRIZVA_TPM_SAFETY_RATIO=0.85` reserves a safety margin and automatically waits between LLM calls when the token window is full. See `RATE_LIMITING.md`.

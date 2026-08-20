@@ -1,5 +1,5 @@
 import { generateObject } from "ai";
-import { groq, MODEL_ID } from "./groq";
+import { groq, MODEL_ID, AI_PROVIDER_OPTIONS } from "./groq";
 import { PlanSchema, type Plan, type CallUsage } from "./types";
 import { plannerPrompt } from "./prompts";
 import { withGroqRetry, type RetryOptions } from "./retry";
@@ -14,13 +14,17 @@ export async function runPlanner(
   // files[]) - even a 10-file project rarely needs more than ~900 tokens
   // for it. 1200 keeps generous headroom without reserving 2000 tokens of
   // an 8000 TPM budget on every single generation, small or large.
-  const maxTokens = 1200;
-  const settle = await reserveGroqBudget(estimateTokens(prompt) + maxTokens);
+  const maxTokens = 900;
+  const settle = await reserveGroqBudget(estimateTokens(prompt) + maxTokens, {
+    onWait: (waitMs, used, limit) =>
+      onRetry?.(0, waitMs, `Waiting for token window: ${used.toLocaleString()}/${limit.toLocaleString()} tokens are reserved. Next request will resume automatically.`),
+  });
 
   const { object, usage } = await withGroqRetry(
     () =>
       generateObject({
         model: groq(MODEL_ID),
+        providerOptions: AI_PROVIDER_OPTIONS,
         schema: PlanSchema,
         prompt,
         // Without an explicit cap, Groq reserves a large default completion

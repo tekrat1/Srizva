@@ -1,5 +1,5 @@
 import { generateText } from "ai";
-import { groq, MODEL_ID } from "./groq";
+import { groq, MODEL_ID, AI_PROVIDER_OPTIONS } from "./groq";
 import type { ImplementationTask, Plan, VirtualFS, CallUsage } from "./types";
 import { coderSystemPrompt, coderTaskPrompt } from "./prompts";
 import { withGroqRetry, type RetryOptions } from "./retry";
@@ -40,14 +40,14 @@ const CONTEXT_CHAR_BUDGET = 8_000;
  * everything is included - which is the common case for the small/medium
  * projects this pipeline targets.
  */
-function selectContext(fs: VirtualFS): string {
+function selectContext(fs: VirtualFS, contextCharBudget = CONTEXT_CHAR_BUDGET): string {
   const entries = Object.entries(fs).reverse(); // most recent first
   const chunks: string[] = [];
   let used = 0;
 
   for (const [path, content] of entries) {
     const chunk = `--- ${path} ---\n${content}`;
-    if (used + chunk.length > CONTEXT_CHAR_BUDGET) {
+    if (used + chunk.length > contextCharBudget) {
       // Budget exhausted - note what got left out instead of silently dropping it.
       chunks.push(`--- (${entries.length - chunks.length} more existing file(s) omitted for context length) ---`);
       break;
@@ -65,7 +65,8 @@ export async function runCoderForFile(
   fs: VirtualFS,
   onRetry?: RetryOptions["onRetry"],
   currentContent?: string | null,
-  precomputedContext?: string
+  precomputedContext?: string,
+  contextCharBudget = CONTEXT_CHAR_BUDGET
 ): Promise<{ content: string; usage: CallUsage }> {
   const existingFilesList = Object.keys(fs).join("\n");
   // Prefer the dependency-aware context selected by the graph's "context"
@@ -75,7 +76,7 @@ export async function runCoderForFile(
   // a caller invoking the coder directly outside the graph).
   const relevant = precomputedContext && precomputedContext.trim().length > 0
     ? precomputedContext
-    : selectContext(fs);
+    : selectContext(fs, contextCharBudget);
   const system = coderSystemPrompt(JSON.stringify(plan));
   const prompt = coderTaskPrompt(task, existingFilesList, relevant, currentContent);
   // Do not derive the completion budget from task-description length alone.
@@ -100,11 +101,15 @@ export async function runCoderForFile(
   // garbage such as `document.getElement` to reach the preview.
   let lastResult: { text: string; usage: CallUsage; finishReason?: string } | null = null;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const settle = await reserveGroqBudget(estimateTokens(system, prompt) + maxTokens);
+    const settle = await reserveGroqBudget(estimateTokens(system, prompt) + maxTokens, {
+      onWait: (waitMs, used, limit) =>
+        onRetry?.(0, waitMs, `Waiting for token window: ${used.toLocaleString()}/${limit.toLocaleString()} tokens are reserved. Generation will resume automatically.`),
+    });
     const result = await withGroqRetry(
       () =>
         generateText({
           model: groq(MODEL_ID),
+          providerOptions: AI_PROVIDER_OPTIONS,
           system,
           prompt:
             attempt === 0

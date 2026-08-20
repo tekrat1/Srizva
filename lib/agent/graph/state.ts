@@ -41,6 +41,7 @@ function overwrite<T>(_current: T, update: T): T {
 export const AgentState = Annotation.Root({
   userRequest: Annotation<string>({ value: overwrite, default: () => "" }),
   mode: Annotation<"generate" | "edit">({ value: overwrite, default: () => "generate" }),
+  fastPath: Annotation<boolean>({ value: overwrite, default: () => false }),
   originalFiles: Annotation<VirtualFS>({ value: overwrite, default: () => ({}) }),
   files: Annotation<VirtualFS>({ value: overwrite, default: () => ({}) }),
   plan: Annotation<Plan | null>({ value: overwrite, default: () => null }),

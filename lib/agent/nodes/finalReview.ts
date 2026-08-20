@@ -1,5 +1,5 @@
 import { generateObject } from "ai";
-import { groq, MODEL_ID } from "../groq";
+import { groq, MODEL_ID, AI_PROVIDER_OPTIONS } from "../groq";
 import { z } from "zod";
 import { reserveGroqBudget, estimateTokens, clampTokenBudget } from "../rateLimiter";
 import { withGroqRetry, type RetryOptions } from "../retry";
@@ -40,12 +40,16 @@ PROJECT:
 ${manifest}`;
 
   const maxTokens = clampTokenBudget(500 + Object.keys(files).length * 40, 600, 1000);
-  const settle = await reserveGroqBudget(estimateTokens(prompt) + maxTokens);
+  const settle = await reserveGroqBudget(estimateTokens(prompt) + maxTokens, {
+    onWait: (waitMs, used, limit) =>
+      onRetry?.(0, waitMs, `Waiting for token window: ${used.toLocaleString()}/${limit.toLocaleString()} tokens are reserved. Final review will resume automatically.`),
+  });
 
   try {
     const { object, usage } = await withGroqRetry(
       () => generateObject({
         model: groq(MODEL_ID),
+        providerOptions: AI_PROVIDER_OPTIONS,
         schema: FinalReviewSchema,
         prompt,
         maxTokens,

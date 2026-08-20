@@ -28,15 +28,88 @@ function sleep(ms: number) {
  * already-exhausted daily quota for no benefit and gets nothing but
  * repeat 429s until maxRetries gives up.
  */
-function parseRetryAfterMs(message: string): number | null {
-  const match = message.match(/try again in ((?:[\d.]+h)?(?:[\d.]+m)?[\d.]+s)/i);
+function headerValue(headers: unknown, name: string): string | null {
+  if (!headers) return null;
+  const lower = name.toLowerCase();
+
+  if (typeof headers === "object") {
+    const h = headers as {
+      get?: (key: string) => string | null;
+      [key: string]: unknown;
+    };
+
+    if (typeof h.get === "function") {
+      const value = h.get(name) ?? h.get(lower);
+      if (value) return value;
+    }
+
+    for (const [key, value] of Object.entries(h)) {
+      if (key.toLowerCase() === lower && typeof value === "string") return value;
+    }
+  }
+
+  return null;
+}
+
+function errorHeaders(err: unknown): unknown[] {
+  if (!err || typeof err !== "object") return [];
+  const e = err as {
+    headers?: unknown;
+    responseHeaders?: unknown;
+    response?: { headers?: unknown };
+    cause?: { headers?: unknown; response?: { headers?: unknown } };
+  };
+
+  return [
+    e.headers,
+    e.responseHeaders,
+    e.response?.headers,
+    e.cause?.headers,
+    e.cause?.response?.headers,
+  ].filter(Boolean);
+}
+
+/**
+ * Prefer the provider's machine-readable retry/reset headers. Groq exposes
+ * retry-after plus x-ratelimit-reset-tokens; the latter is available even
+ * before a 429 and is much more reliable than guessing from an error string.
+ */
+function parseRetryAfterMs(err: unknown, message: string): number | null {
+  for (const headers of errorHeaders(err)) {
+    const retryAfter = headerValue(headers, "retry-after");
+    if (retryAfter) {
+      const seconds = Number.parseFloat(retryAfter);
+      if (Number.isFinite(seconds) && seconds > 0) {
+        return Math.ceil(seconds * 1000);
+      }
+    }
+
+    const resetTokens = headerValue(headers, "x-ratelimit-reset-tokens");
+    if (resetTokens) {
+      const match = resetTokens.match(
+        /^(?:(\d+(?:\.\d+)?)h)?(?:(\d+(?:\.\d+)?)m)?(?:(\d+(?:\.\d+)?)s)?$/i
+      );
+      if (match) {
+        const hours = Number(match[1] ?? 0);
+        const minutes = Number(match[2] ?? 0);
+        const seconds = Number(match[3] ?? 0);
+        const total = hours * 3600 + minutes * 60 + seconds;
+        if (total > 0) return Math.ceil(total * 1000);
+      }
+    }
+  }
+
+  const match = message.match(
+    /try again in ((?:[\d.]+h)?(?:[\d.]+m)?[\d.]+s)/i
+  );
   if (!match) return null;
+
   const span = match[1];
   const hours = parseFloat(span.match(/([\d.]+)h/)?.[1] ?? "0");
   const minutes = parseFloat(span.match(/([\d.]+)m/)?.[1] ?? "0");
   const seconds = parseFloat(span.match(/([\d.]+)s/)?.[1] ?? "0");
   const totalSeconds = hours * 3600 + minutes * 60 + seconds;
-  if (Number.isNaN(totalSeconds) || totalSeconds <= 0) return null;
+  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return null;
   return Math.ceil(totalSeconds * 1000);
 }
 
@@ -83,7 +156,7 @@ export async function withGroqRetry<T>(
       const message = err instanceof Error ? err.message : String(err);
       // Add a small buffer on top of Groq's suggested wait so we don't
       // race the window boundary.
-      const waitMs = (parseRetryAfterMs(message) ?? fallbackDelayMs) + 500;
+      const waitMs = (parseRetryAfterMs(err, message) ?? fallbackDelayMs) + 500;
 
       // A daily (TPD/RPD) cap means retrying within this request won't
       // help - the suggested wait is usually minutes to hours, way past

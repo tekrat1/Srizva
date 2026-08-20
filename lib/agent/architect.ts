@@ -1,5 +1,5 @@
 import { generateObject } from "ai";
-import { groq, MODEL_ID } from "./groq";
+import { groq, MODEL_ID, AI_PROVIDER_OPTIONS } from "./groq";
 import { TaskPlanSchema, type TaskPlan, type Plan, type CallUsage } from "./types";
 import { architectPrompt } from "./prompts";
 import { withGroqRetry, type RetryOptions } from "./retry";
@@ -16,13 +16,17 @@ export async function runArchitect(
   // even runs (see rateLimiter.ts) - a flat worst-case number here was
   // the single biggest reason small projects queued behind an
   // unnecessarily large reservation.
-  const maxTokens = clampTokenBudget(500 + plan.files.length * 260, 800, 3000);
-  const settle = await reserveGroqBudget(estimateTokens(prompt) + maxTokens);
+  const maxTokens = clampTokenBudget(400 + plan.files.length * 220, 600, 2400);
+  const settle = await reserveGroqBudget(estimateTokens(prompt) + maxTokens, {
+    onWait: (waitMs, used, limit) =>
+      onRetry?.(0, waitMs, `Waiting for token window: ${used.toLocaleString()}/${limit.toLocaleString()} tokens are reserved. Next request will resume automatically.`),
+  });
 
   const { object, usage } = await withGroqRetry(
     () =>
       generateObject({
         model: groq(MODEL_ID),
+        providerOptions: AI_PROVIDER_OPTIONS,
         schema: TaskPlanSchema,
         prompt,
         // See planner.ts for why this cap matters: it's counted toward

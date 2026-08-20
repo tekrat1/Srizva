@@ -1,5 +1,5 @@
 import { generateObject, generateText } from "ai";
-import { groq, MODEL_ID } from "./groq";
+import { groq, MODEL_ID, AI_PROVIDER_OPTIONS } from "./groq";
 import {
   TaskPlanSchema,
   addUsage,
@@ -37,13 +37,17 @@ export async function planEdit(
   // architect.ts - a 1-2 file project's edit plan doesn't need the same
   // reserved budget as a 10-file one, and the flat number was reserved
   // against Groq's TPM cap before the call even ran.
-  const maxTokens = clampTokenBudget(500 + Object.keys(files).length * 220, 800, 3000);
-  const settle = await reserveGroqBudget(estimateTokens(prompt) + maxTokens);
+  const maxTokens = clampTokenBudget(400 + Object.keys(files).length * 180, 600, 2200);
+  const settle = await reserveGroqBudget(estimateTokens(prompt) + maxTokens, {
+    onWait: (waitMs, used, limit) =>
+      onRetry?.(0, waitMs, `Waiting for token window: ${used.toLocaleString()}/${limit.toLocaleString()} tokens are reserved. Edit will resume automatically.`),
+  });
 
   const { object, usage } = await withGroqRetry(
     () =>
       generateObject({
         model: groq(MODEL_ID),
+        providerOptions: AI_PROVIDER_OPTIONS,
         schema: TaskPlanSchema,
         prompt,
         // See CONTEXT_CHAR_BUDGET note below - Groq counts requested
@@ -127,11 +131,15 @@ export async function editFileOnce(
 
   let lastResult: { text: string; usage: CallUsage; finishReason?: string } | null = null;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const settle = await reserveGroqBudget(estimateTokens(system, prompt) + maxTokens);
+    const settle = await reserveGroqBudget(estimateTokens(system, prompt) + maxTokens, {
+      onWait: (waitMs, used, limit) =>
+        onRetry?.(0, waitMs, `Waiting for token window: ${used.toLocaleString()}/${limit.toLocaleString()} tokens are reserved. Edit will resume automatically.`),
+    });
     const result = await withGroqRetry(
       () =>
         generateText({
           model: groq(MODEL_ID),
+          providerOptions: AI_PROVIDER_OPTIONS,
           system,
           prompt:
             attempt === 0

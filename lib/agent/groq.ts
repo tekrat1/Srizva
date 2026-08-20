@@ -15,12 +15,11 @@ import { createGroq } from "@ai-sdk/groq";
  * - Cerebras: 30K TPM / 1M TPD (uncached) on the same model - 5x the
  *   daily headroom - but only 5 RPM / 2400 RPD, so it paces slower on
  *   builds with several files.
- * Defaults to Cerebras since that's the current bottleneck being solved
- * (daily quota), but flip back to Groq any time by changing AI_PROVIDER.
+ * Defaults to Groq to preserve Srizva's original setup. Set AI_PROVIDER=cerebras only when a Cerebras API key is configured.
  */
 type Provider = "groq" | "cerebras";
 
-const PROVIDER: Provider = (process.env.AI_PROVIDER?.toLowerCase() as Provider) || "cerebras";
+const PROVIDER: Provider = (process.env.AI_PROVIDER?.toLowerCase() as Provider) || "groq";
 
 const PROVIDER_CONFIG: Record<Provider, { baseURL?: string; apiKey: string | undefined; modelId: string; envVarName: string }> = {
   groq: {
@@ -53,3 +52,17 @@ export const MODEL_ID = config.modelId;
 export const AI_PROVIDER = PROVIDER;
 export const isProviderConfigured = Boolean(config.apiKey);
 export const requiredEnvVarName = config.envVarName;
+
+/**
+ * GPT-OSS is a reasoning model. Medium reasoning is the provider default and
+ * can consume a large amount of completion quota for routine code generation.
+ * Keep routine generation on low reasoning; override with
+ * AI_REASONING_EFFORT=medium/high when a deployment needs deeper reasoning.
+ */
+const configuredReasoning = (process.env.AI_REASONING_EFFORT || "low").toLowerCase();
+export const REASONING_EFFORT: "low" | "medium" | "high" =
+  configuredReasoning === "high" ? "high" : configuredReasoning === "medium" ? "medium" : "low";
+
+export const AI_PROVIDER_OPTIONS = {
+  groq: { reasoningEffort: REASONING_EFFORT },
+};
