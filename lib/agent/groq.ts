@@ -223,6 +223,79 @@ export async function generateTextWithFallback(
 }
 
 /** Generate structured output with the same provider failover behavior. */
+async function generateObjectViaText(
+  provider: AIProviderName,
+  options: GenerateObjectFallbackOptions
+) {
+  const schema = options.schema as { parse?: (value: unknown) => unknown; safeParse?: (value: unknown) => { success: boolean; data?: unknown; error?: unknown } };
+  const basePrompt = options.prompt;
+  const jsonPrompt =
+    `${basePrompt}\n\n` +
+    `RETURN ONLY VALID JSON. No markdown fences, no commentary, no tool calls. ` +
+    `The JSON must satisfy the requested schema.`;
+
+  const result = await generateText({
+    prompt: jsonPrompt,
+    maxTokens: options.maxTokens,
+    maxRetries: 0,
+    model: modelFor(provider),
+    providerOptions: provider === "groq" ? AI_PROVIDER_OPTIONS : undefined,
+  } as Parameters<typeof generateText>[0]);
+
+  const raw = String(result.text ?? "").trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    // Extract the first balanced JSON object/array from model chatter.
+    const start = raw.search(/[\[{]/);
+    if (start < 0) throw new Error(`Provider returned no JSON object: ${raw.slice(0, 300)}`);
+    const opener = raw[start];
+    const closer = opener === "{" ? "}" : "]";
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    let end = -1;
+    for (let i = start; i < raw.length; i++) {
+      const ch = raw[i];
+      if (escaped) { escaped = false; continue; }
+      if (ch === "\\") { escaped = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === opener) depth++;
+      else if (ch === closer) {
+        depth--;
+        if (depth === 0) { end = i + 1; break; }
+      }
+    }
+    if (end < 0) throw new Error(`Provider returned incomplete JSON: ${raw.slice(0, 300)}`);
+    parsed = JSON.parse(raw.slice(start, end));
+  }
+
+  if (typeof schema.safeParse === "function") {
+    const checked = schema.safeParse(parsed);
+    if (!checked.success) throw new Error(`Structured output failed schema validation: ${String(checked.error)}`);
+    return { object: checked.data, usage: result.usage, finishReason: result.finishReason };
+  }
+  if (typeof schema.parse === "function") {
+    return { object: schema.parse(parsed), usage: result.usage, finishReason: result.finishReason };
+  }
+  return { object: parsed, usage: result.usage, finishReason: result.finishReason };
+}
+
+/**
+ * Structured-output fallback.
+ *
+ * Some OpenAI-compatible/free routed models do not reliably support the
+ * provider's structured-output protocol. In that case we ask the same
+ * provider for strict JSON text and validate it locally with the Zod schema.
+ * This keeps planner/architect calls from incorrectly exhausting the entire
+ * provider chain just because `generateObject` is unsupported.
+ */
 export async function generateObjectWithFallback(
   options: GenerateObjectFallbackOptions,
   preferredProvider?: AIProviderName | null
@@ -237,18 +310,33 @@ export async function generateObjectWithFallback(
     }
 
     try {
-      // Cast bypasses TS's overload-picking (see the option-type comment
-      // above) - the actual shape passed at runtime always matches the
-      // schema-output overload, which is all this wrapper is used for.
-      const result = await (generateObject as any)({
-        ...options,
-        // Same fail-fast rule as generateTextWithFallback: do not let the
-        // SDK retry an unavailable provider before the router can fail over.
-        maxRetries: 0,
-        model: modelFor(provider),
-        providerOptions: provider === "groq" ? AI_PROVIDER_OPTIONS : undefined,
-      });
-      if (provider !== PROVIDER_ORDER[0]) {
+      let result: any;
+      try {
+        result = await (generateObject as any)({
+          ...options,
+          maxRetries: 0,
+          model: modelFor(provider),
+          providerOptions: provider === "groq" ? AI_PROVIDER_OPTIONS : undefined,
+        });
+      } catch (structuredError) {
+        const structuredMessage = errorText(structuredError);
+        // Quota/availability/auth/model errors should go straight to the
+        // next provider. Only use the JSON-text fallback for failures that
+        // look like structured-output/tool-format incompatibility.
+        const canUseTextFallback =
+          !isDailyQuotaExhausted(structuredError) &&
+          !providerShouldFailFast(structuredError) &&
+          !/401|403|unauthorized|forbidden|invalid api key|model.*not found|not found/i.test(structuredMessage);
+
+        if (!canUseTextFallback) throw structuredError;
+
+        console.warn(
+          `[Srizva] ${provider} structured output unavailable; retrying same provider with strict JSON text fallback`
+        );
+        result = await generateObjectViaText(provider, options);
+      }
+
+      if (provider !== (preferredProvider ?? PROVIDER_ORDER[0])) {
         console.info(`[Srizva] provider switched to ${provider}; continuing current task`);
       }
       return { ...result, providerUsed: provider };
@@ -256,24 +344,25 @@ export async function generateObjectWithFallback(
       lastError = error;
       const msg = providerErrorMessage(provider, error);
       failures.push(msg);
+
       if (isDailyQuotaExhausted(error)) {
-        console.warn(`[Srizva] ${provider} daily quota exhausted; circuit breaker open for this generation; skipping provider`);
+        console.warn(`[Srizva] ${provider} daily quota exhausted; skipping provider for this generation`);
         continue;
       }
       if (providerShouldFailFast(error) || isRetryableProviderFailure(error)) {
-        console.warn(`[Srizva] ${provider} unavailable; circuit breaker open for this generation; switching immediately to next provider`, errorText(error));
+        console.warn(
+          `[Srizva] ${provider} unavailable; switching immediately to next provider`,
+          errorText(error)
+        );
         continue;
       }
-      // A model/config/provider-specific error is also isolated to this
-      // provider. Trying the next configured provider is safer than allowing
-      // one provider to terminate the whole LangGraph task.
       console.warn(`[Srizva] ${provider} failed; switching immediately to next provider`, errorText(error));
     }
   }
 
+  const configured = PROVIDER_ORDER.filter((p) => PROVIDER_CONFIG[p].configured);
   throw new Error(
-    `All configured AI providers failed. ` +
-    `Configure at least two providers for automatic failover.\n` +
+    `All configured AI providers failed (${configured.join(", ") || "none configured"}).\n` +
     failures.join("\n") +
     (lastError ? `\nLast provider error: ${errorText(lastError)}` : "")
   );
