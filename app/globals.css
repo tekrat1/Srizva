@@ -443,6 +443,197 @@
   font-weight: 700;
 }
 
+/* ---------------------------------------------------------------- */
+/* Kinetic Clockwork theme (landing hero)                           */
+/* Deep navy/black machine-room backdrop: etched grid + vignette,   */
+/* brass/gold cogs (see components/clockwork/*), and instrument-     */
+/* style dials. Replaces Glitch Drop on the landing page only.      */
+/* ---------------------------------------------------------------- */
+
+.clockwork-stage {
+  background: radial-gradient(
+      circle at 18% 12%,
+      rgba(232, 165, 75, 0.1),
+      transparent 40%
+    ),
+    radial-gradient(circle at 85% 85%, rgba(232, 165, 75, 0.07), transparent 38%),
+    #07080b;
+}
+
+.clockwork-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(rgba(232, 165, 75, 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(232, 165, 75, 0.09) 1px, transparent 1px);
+  background-size: 46px 46px;
+  -webkit-mask-image: radial-gradient(ellipse 80% 65% at 50% 30%, black 0%, transparent 78%);
+  mask-image: radial-gradient(ellipse 80% 65% at 50% 30%, black 0%, transparent 78%);
+  animation: clockwork-grid-drift 24s linear infinite;
+}
+@keyframes clockwork-grid-drift {
+  0% {
+    background-position: 0 0, 0 0;
+  }
+  100% {
+    background-position: 46px 46px, 46px 46px;
+  }
+}
+
+.clockwork-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 180px 60px #07080b;
+}
+
+.clockwork-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(232, 165, 75, 0.08);
+  color: #f6d9a0;
+  font-family: var(--font-glitch-mono), monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 999px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid rgba(232, 165, 75, 0.3);
+}
+.clockwork-pill i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #e8a54b;
+  box-shadow: 0 0 8px 1px rgba(232, 165, 75, 0.9);
+  animation: clockwork-pulse 1.8s ease-in-out infinite;
+}
+@keyframes clockwork-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.75);
+  }
+}
+
+.clockwork-h1 {
+  font-family: var(--font-glitch-display), sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+}
+.clockwork-h1 .c-line {
+  display: block;
+}
+.clockwork-h1 .c-line.gold {
+  background-image: linear-gradient(100deg, #f6d9a0, #e8a54b 55%, #a8622f);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 2px 18px rgba(232, 165, 75, 0.25));
+}
+.clockwork-h1 .c-line.cream {
+  color: #f3ead9;
+}
+.clockwork-h1 .c-line.cream b {
+  font-weight: 700;
+  color: #5ad1e6;
+}
+
+.clockwork-body {
+  font-family: var(--font-glitch-mono), monospace;
+  color: #9a9184;
+}
+
+.clockwork-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(100deg, #f6d9a0, #e8a54b 60%, #c98f3f);
+  background-size: 200% 100%;
+  color: #23150a;
+  font-weight: 700;
+  font-family: var(--font-glitch-display), sans-serif;
+  font-size: 13px;
+  padding: 12px 24px;
+  border-radius: 8px;
+  box-shadow:
+    0 8px 24px -6px rgba(232, 165, 75, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition: background-position 0.5s ease;
+}
+.clockwork-cta:hover {
+  background-position: 100% 0;
+}
+
+.clockwork-strip {
+  border: 1px solid rgba(232, 165, 75, 0.16);
+  background: linear-gradient(180deg, rgba(232, 165, 75, 0.05), rgba(20, 16, 10, 0.4));
+  border-radius: 16px;
+  backdrop-filter: blur(6px);
+}
+
+.clockwork-card {
+  position: relative;
+  border: 1px solid rgba(232, 165, 75, 0.14);
+  background: linear-gradient(165deg, rgba(30, 24, 16, 0.55), rgba(10, 11, 14, 0.65));
+  border-radius: 14px;
+  transition:
+    border-color 0.25s ease,
+    transform 0.25s ease;
+}
+.clockwork-card:hover {
+  border-color: rgba(232, 165, 75, 0.45);
+  transform: translateY(-3px);
+}
+.clockwork-card::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 22px;
+  height: 22px;
+  border: 1.4px solid rgba(232, 165, 75, 0.35);
+  border-radius: 50%;
+  border-top-color: transparent;
+  border-right-color: transparent;
+  animation: orbit-spin 6s linear infinite;
+}
+
+.clockwork-icon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f6d9a0, #c98f3f 65%, #6b4420);
+  color: #241608;
+  box-shadow:
+    0 4px 10px -2px rgba(0, 0, 0, 0.6),
+    inset 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+@keyframes dial-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.015);
+  }
+}
+.animate-dial-breathe {
+  animation: dial-breathe 4.5s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.001ms !important;

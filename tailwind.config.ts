@@ -40,6 +40,21 @@ const config: Config = {
           cyan: "#00F0FF",
           yellow: "#E8FF3C",
         },
+        // Kinetic Clockwork palette — brass/gold machinery on a deep
+        // navy-black canvas. Used on the landing hero (see globals.css
+        // `.clockwork-*` classes and components/clockwork/*).
+        clockwork: {
+          ink: "#07080b",
+          panel: "#0e1015",
+          grid: "#1b2330",
+          gold: "#e8a54b",
+          "gold-light": "#f6d9a0",
+          brass: "#c98f3f",
+          bronze: "#8a5a2b",
+          copper: "#a8622f",
+          cyan: "#5ad1e6",
+          cream: "#f3ead9",
+        },
       },
       fontFamily: {
         display: ["var(--font-display)", "system-ui", "sans-serif"],

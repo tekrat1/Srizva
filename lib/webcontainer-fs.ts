@@ -3,9 +3,9 @@
 // but it doesn't need the real package as a dependency just for a type.
 type FileSystemTree = {
   [name: string]:
-      | { file: { contents: string | Uint8Array } }
-      | { directory: FileSystemTree }
-      | { file: { symlink: string } };
+    | { file: { contents: string | Uint8Array } }
+    | { directory: FileSystemTree }
+    | { file: { symlink: string } };
 };
 import type { VirtualFS } from "@/lib/agent/types";
 
@@ -76,7 +76,8 @@ export function buildFileSystemTree(files: VirtualFS): {
     tree: tree as FileSystemTree,
     hasPackageJson,
     runCommand: hasPackageJson
-        ? { cmd: "npm", args: ["run", "dev"] }
-        : { cmd: "node", args: ["server.mjs"] },
+      ? { cmd: "npm", args: ["run", "dev"] }
+      : { cmd: "node", args: ["server.mjs"] },
   };
 }
+
