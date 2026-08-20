@@ -7,10 +7,11 @@ import type { GenerationEvent } from "./types";
  */
 export async function generateProject(
   userPrompt: string,
-  emit: (event: GenerationEvent) => void
+  emit: (event: GenerationEvent) => void,
+  turboMode = false
 ): Promise<void> {
   try {
-    await runGenerationGraph(userPrompt, emit);
+    await runGenerationGraph(userPrompt, emit, turboMode);
   } catch (err) {
     console.error("[generateProject] graph failed:", err);
     const message = err instanceof Error

@@ -33,6 +33,32 @@ simple `{ path: content }` map for the duration of the request and get
 streamed straight to the browser. That keeps concurrent users fully
 isolated from each other with no shared state to clean up.
 
+## Functional QA and repair
+
+Srizva does not treat JavaScript syntax as proof that a generated site works.
+After each file is generated it performs structural QA, and before finalizing
+the project it runs deterministic cross-file contract checks. These checks
+look for:
+
+- truncated or empty source files and unbalanced HTML/CSS/JS
+- leaked model tool-call / markdown protocol
+- empty core interaction functions and explicit not-implemented placeholders
+- HTML `onclick` handlers whose functions do not exist
+- JS `getElementById(...)` references that have no matching generated element
+- common button/value wiring mistakes such as passing `button.id` as a value
+- calculator-style projects with missing numeric input or empty evaluation logic
+- CSS selectors that do not match generated HTML classes/ids
+- broken local `src`/`href` references
+
+When a high-confidence issue is found, the LangGraph workflow routes the
+affected file back through context → coder → QA and then revalidates the
+whole project. Provider fallback remains sticky for the rest of the same
+generation, so an exhausted provider is not repeatedly retried.
+
+These checks are intentionally deterministic and do not execute untrusted
+generated JavaScript on the server. A browser-level runtime smoke-test layer
+would be a further reliability upgrade beyond static functional QA.
+
 ## Live preview (`components/LivePreview.tsx`)
 
 - The generated `index.html` has its local `<link rel="stylesheet">` and `<script src="...">` tags inlined with the matching file content from the in-memory file map (external CDN links/scripts are left as-is).
@@ -163,4 +189,8 @@ This reduces unnecessary LLM calls and context/reasoning usage; it does not incr
 
 ## AI rate-limit protection
 
-Set `AI_PROVIDER=groq` and configure `GROQ_TPM_LIMIT` / `GROQ_RPM_LIMIT` to match your provider dashboard. `SRIZVA_TPM_SAFETY_RATIO=0.85` reserves a safety margin and automatically waits between LLM calls when the token window is full. See `RATE_LIMITING.md`.
+Set `AI_PROVIDER=auto` for provider fallback. Groq TPM/RPM settings are optional local safeguards only; provider selection happens first so a Groq limit cannot prevent Gemini/OpenRouter fallback. See `RATE_LIMITING.md`.
+
+## Multi-provider AI fallback
+
+Configure `GROQ_API_KEY`, `GEMINI_API_KEY`, and/or `OPENROUTER_API_KEY` in `.env.local`. Srizva defaults to `groq,gemini,openrouter` and continues the current LangGraph task when a provider is unavailable or quota-limited. See `MULTI_PROVIDER_FALLBACK.md`.

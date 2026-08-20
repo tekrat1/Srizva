@@ -7,6 +7,7 @@ import type {
   VirtualFS,
   GenerationEvent,
 } from "../types";
+import type { AIProviderName } from "../groq";
 
 export interface FileChange {
   path: string;
@@ -42,6 +43,16 @@ export const AgentState = Annotation.Root({
   userRequest: Annotation<string>({ value: overwrite, default: () => "" }),
   mode: Annotation<"generate" | "edit">({ value: overwrite, default: () => "generate" }),
   fastPath: Annotation<boolean>({ value: overwrite, default: () => false }),
+  // "Turbo mode": user-selected speed toggle. When true, the graph skips
+  // per-file repair, project-wide validation-repair, and the final review
+  // LLM pass - same core planner/architect/coder calls, none of the
+  // reliability overhead. See graph.ts.
+  turboMode: Annotation<boolean>({ value: overwrite, default: () => false }),
+  // Sticky provider: once a call succeeds on a given AI provider, later
+  // calls in the SAME generation try that provider first instead of
+  // restarting at the front of PROVIDER_ORDER (groq -> gemini -> ...) and
+  // re-failing against exhausted/unavailable providers every single call.
+  stickyProvider: Annotation<AIProviderName | null>({ value: overwrite, default: () => null }),
   originalFiles: Annotation<VirtualFS>({ value: overwrite, default: () => ({}) }),
   files: Annotation<VirtualFS>({ value: overwrite, default: () => ({}) }),
   plan: Annotation<Plan | null>({ value: overwrite, default: () => null }),

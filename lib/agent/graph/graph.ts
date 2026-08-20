@@ -58,12 +58,12 @@ export function createGenerationGraph(emit: AgentEventEmitter) {
     })
     .addNode("planner", async (state: AgentStateType) => {
       emit({ type: "status", message: "Planning your project..." });
-      const result = await runPlanner(state.userRequest, onRetry);
+      const result = await runPlanner(state.userRequest, onRetry, state.stickyProvider);
       const plan = ensureCoreStaticFiles(result.plan);
       const usage = state.usage ?? emptyUsage(MODEL_ID);
       addUsage(usage, result.usage);
       emit({ type: "plan", plan });
-      return { plan, usage };
+      return { plan, usage, stickyProvider: result.providerUsed };
     })
     .addNode("architect", async (state: AgentStateType) => {
       const plan = state.plan!;
@@ -71,6 +71,7 @@ export function createGenerationGraph(emit: AgentEventEmitter) {
       let taskPlan: TaskPlan;
       let usage = state.usage ?? emptyUsage(MODEL_ID);
 
+      let stickyProvider = state.stickyProvider;
       if (plan.files.length === 1) {
         const file = plan.files[0];
         taskPlan = {
@@ -80,9 +81,10 @@ export function createGenerationGraph(emit: AgentEventEmitter) {
           }],
         };
       } else {
-        const result = await runArchitect(plan, onRetry);
+        const result = await runArchitect(plan, onRetry, stickyProvider);
         taskPlan = result.taskPlan;
         addUsage(usage, result.usage);
+        stickyProvider = result.providerUsed;
       }
 
       // Guard against an LLM task plan accidentally omitting a planned file.
@@ -103,6 +105,7 @@ export function createGenerationGraph(emit: AgentEventEmitter) {
         currentTaskIndex: 0,
         currentTask: taskPlan.implementation_steps[0] ?? null,
         usage,
+        stickyProvider,
       };
     })
     .addNode("context", async (state: AgentStateType) => {
@@ -152,7 +155,8 @@ export function createGenerationGraph(emit: AgentEventEmitter) {
         onRetry,
         isRepair ? state.files[task.filepath] ?? null : null,
         state.relevantContext,
-        state.fastPath ? 4000 : 8000
+        state.fastPath ? 4000 : 8000,
+        state.stickyProvider
       );
 
       const files: VirtualFS = { ...state.files };
@@ -167,6 +171,7 @@ export function createGenerationGraph(emit: AgentEventEmitter) {
       return {
         files,
         usage,
+        stickyProvider: result.providerUsed,
         generationFinishReason: result.usage.finishReason ?? null,
         changes: [
           ...state.changes,
@@ -259,20 +264,21 @@ export function createGenerationGraph(emit: AgentEventEmitter) {
     .addNode("finalReview", async (state: AgentStateType) => {
       if (!state.plan) return {};
       emit({ type: "status", message: "Performing final agent review..." });
-      const result = await runFinalReview(state.plan, state.files, onRetry);
+      const result = await runFinalReview(state.plan, state.files, onRetry, state.stickyProvider);
       let usage = state.usage ?? emptyUsage(MODEL_ID);
       if (result.usage) addUsage(usage, result.usage);
+      const stickyProvider = result.providerUsed ?? state.stickyProvider;
       if (!result.passed && result.issues.length) {
         const issueMessages = result.issues.map((i) => `${i.path}: ${i.message}`);
         emit({ type: "status", message: `Final review found ${result.issues.length} issue(s).` });
-        return { currentIssues: issueMessages, usage, validationIssues: result.issues.map((i) => ({
+        return { currentIssues: issueMessages, usage, stickyProvider, validationIssues: result.issues.map((i) => ({
           path: i.path,
           message: i.message,
           kind: "integration" as const,
         })) };
       }
       emit({ type: "status", message: "Final agent review passed." });
-      return { usage, finalStatus: "completed" as const };
+      return { usage, stickyProvider, finalStatus: "completed" as const };
     })
     .addNode("fail", async (state: AgentStateType) => {
       const message = state.lastError || "Generation stopped after reaching the repair limit.";
@@ -297,6 +303,13 @@ export function createGenerationGraph(emit: AgentEventEmitter) {
     .addEdge("context", "coder")
     .addEdge("coder", "qa")
     .addConditionalEdges("qa", (state: AgentStateType) => {
+      // Turbo mode: no per-file repair loop, ever - move on regardless of
+      // QA issues. (The base sanitizer + prompt hardening still catch the
+      // tool-call-leak class of bug before this point; turbo mode just
+      // skips the LLM repair round-trip for everything else.)
+      if (state.turboMode) {
+        return state.repairReason === "validation" ? "revalidate" : "advance";
+      }
       if (state.currentIssues.length === 0) {
         return state.repairReason === "validation" ? "revalidate" : "advance";
       }
@@ -316,12 +329,22 @@ export function createGenerationGraph(emit: AgentEventEmitter) {
         validate: "validate",
       })
     .addConditionalEdges("validate", (state: AgentStateType) => {
-      if (state.validationIssues.length === 0) return state.fastPath ? "finish" : "finalReview";
+      // BUGFIX: this branch can return "finish" (fastPath with zero
+      // validation issues, or turboMode skipping finalReview entirely),
+      // but "finish" was missing from the destination map below - that's
+      // the exact cause of "Branch condition returned unknown or null
+      // destination" crashing generations mid-run. Every string this
+      // function can return must be a key in the map.
+      if (state.validationIssues.length === 0) {
+        return state.fastPath || state.turboMode ? "finish" : "finalReview";
+      }
+      if (state.turboMode) return "finish"; // turbo mode never repairs post-hoc either
       const issue = state.validationIssues[0];
       const attempts = state.repairAttempts[issue.path] ?? 0;
       if (attempts >= MAX_REPAIR_ATTEMPTS) return "fail";
       return "prepare";
     }, {
+      finish: "finish",
       finalReview: "finalReview",
       prepare: "prepareValidationRepair",
       fail: "fail",
@@ -351,7 +374,8 @@ export function createGenerationGraph(emit: AgentEventEmitter) {
 
 export async function runGenerationGraph(
   userRequest: string,
-  emit: AgentEventEmitter
+  emit: AgentEventEmitter,
+  turboMode = false
 ): Promise<void> {
   const app = createGenerationGraph(emit);
   const threadId = `generation-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -362,5 +386,6 @@ export async function runGenerationGraph(
     originalFiles: {},
     maxIterations: 40,
     finalStatus: "running",
+    turboMode,
   }, { configurable: { thread_id: threadId }, recursionLimit: 200 });
 }

@@ -54,6 +54,7 @@ function logLineMeta(line: string) {
 export default function GenerationWorkbench() {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
+  const [turboMode, setTurboMode] = useState(false);
   const [editInstruction, setEditInstruction] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [log, setLog] = useState<string[]>([]);
@@ -111,7 +112,7 @@ export default function GenerationWorkbench() {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ prompt, turboMode }),
       });
 
       if (!res.ok || !res.body) {
@@ -393,6 +394,22 @@ export default function GenerationWorkbench() {
           <span className="relative">Generate</span>
         </button>
       </form>
+
+      <label className="flex w-fit items-center gap-2 text-xs text-muted">
+        <input
+          type="checkbox"
+          checked={turboMode}
+          disabled={phase === "generating"}
+          onChange={(e) => setTurboMode(e.target.checked)}
+          className="h-3.5 w-3.5 rounded border-border accent-aurora-violet disabled:opacity-50"
+        />
+        <span>
+          Turbo mode
+          <span className="text-muted/70">
+            {" "}— skip QA repair, validation-repair and final review for a much faster (but less audited) build.
+          </span>
+        </span>
+      </label>
 
       {phase === "idle" && log.length === 0 && !hasFiles && (
         <PromptGallery onSelect={(p) => setPrompt(p)} />

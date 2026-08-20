@@ -1,15 +1,23 @@
-import { generateText } from "ai";
-import { groq, MODEL_ID, AI_PROVIDER_OPTIONS } from "./groq";
+import { generateTextWithFallback, type AIProviderName } from "./groq";
 import type { ImplementationTask, Plan, VirtualFS, CallUsage } from "./types";
 import { coderSystemPrompt, coderTaskPrompt } from "./prompts";
-import { withGroqRetry, type RetryOptions } from "./retry";
-import { reserveGroqBudget, estimateTokens, clampTokenBudget } from "./rateLimiter";
+import { type RetryOptions } from "./retry";
+import { clampTokenBudget } from "./rateLimiter";
+import { sanitizeToolCallArtifacts } from "./sanitize";
 
 // Strips accidental ```lang fences if the model adds them despite instructions.
 function stripFences(content: string): string {
   const trimmed = content.trim();
   const fenceMatch = trimmed.match(/^```[a-zA-Z0-9]*\n([\s\S]*?)\n```$/);
   return fenceMatch ? fenceMatch[1] : trimmed;
+}
+
+// Some free-tier OpenRouter models leak their internal tool-call protocol
+// (e.g. `<|tool_call_start|>[write(file='index.html', content='...')]`)
+// instead of returning plain file content. Clean that up before the text
+// ever reaches fence-stripping, QA, or the preview.
+function cleanModelOutput(content: string): string {
+  return stripFences(sanitizeToolCallArtifacts(content));
 }
 
 // Rough token-budget guard so we never blow the model's context window on
@@ -66,8 +74,9 @@ export async function runCoderForFile(
   onRetry?: RetryOptions["onRetry"],
   currentContent?: string | null,
   precomputedContext?: string,
-  contextCharBudget = CONTEXT_CHAR_BUDGET
-): Promise<{ content: string; usage: CallUsage }> {
+  contextCharBudget = CONTEXT_CHAR_BUDGET,
+  preferredProvider?: AIProviderName | null
+): Promise<{ content: string; usage: CallUsage; providerUsed: AIProviderName }> {
   const existingFilesList = Object.keys(fs).join("\n");
   // Prefer the dependency-aware context selected by the graph's "context"
   // node (nodes/context.ts - target's direct deps, reverse deps, and
@@ -99,26 +108,18 @@ export async function runCoderForFile(
   // A length finish is an explicit truncation signal. Retry once with a
   // larger completion budget rather than allowing syntactically-valid
   // garbage such as `document.getElement` to reach the preview.
-  let lastResult: { text: string; usage: CallUsage; finishReason?: string } | null = null;
+  let lastResult: { text: string; usage: CallUsage; finishReason?: string; providerUsed: AIProviderName } | null = null;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const settle = await reserveGroqBudget(estimateTokens(system, prompt) + maxTokens, {
-      onWait: (waitMs, used, limit) =>
-        onRetry?.(0, waitMs, `Waiting for token window: ${used.toLocaleString()}/${limit.toLocaleString()} tokens are reserved. Generation will resume automatically.`),
-    });
-    const result = await withGroqRetry(
-      () =>
-        generateText({
-          model: groq(MODEL_ID),
-          providerOptions: AI_PROVIDER_OPTIONS,
-          system,
+    // Provider fallback owns rate-limit handling; do not reserve Groq before provider selection.
+    const settle = (_actualTokens?: number) => {};
+    const result = await generateTextWithFallback({
+              system,
           prompt:
             attempt === 0
               ? prompt
               : `${prompt}\n\nCRITICAL: Your previous response was truncated before the file was complete. Return the COMPLETE file from the first character to the last character. Do not stop early. Do not use placeholders or omit code.`,
           maxTokens,
-        }),
-      { onRetry }
-    );
+        }, preferredProvider);
     settle(result.usage.totalTokens ?? maxTokens);
     lastResult = result;
     if (result.finishReason !== "length") break;
@@ -127,7 +128,8 @@ export async function runCoderForFile(
 
   if (!lastResult) throw new Error("Coder returned no result.");
   return {
-    content: stripFences(lastResult.text),
+    content: cleanModelOutput(lastResult.text),
     usage: { ...lastResult.usage, finishReason: lastResult.finishReason },
+    providerUsed: lastResult.providerUsed,
   };
 }

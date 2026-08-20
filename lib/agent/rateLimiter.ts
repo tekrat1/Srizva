@@ -37,7 +37,7 @@ const DEFAULTS = {
   cerebras: { tpm: 30000, rpm: 5 },
 } as const;
 
-const providerDefaults = DEFAULTS[AI_PROVIDER];
+const providerDefaults = DEFAULTS.groq; // Groq is the only provider with a local TPM reservation model; fallbacks use provider-side limits.
 const TPM_LIMIT = envNumber(process.env.GROQ_TPM_LIMIT, providerDefaults.tpm);
 const RPM_LIMIT = envNumber(process.env.GROQ_RPM_LIMIT, providerDefaults.rpm);
 const SAFETY_RATIO = Math.min(
@@ -87,14 +87,21 @@ export async function reserveGroqBudget(
 ): Promise<(actualTokens: number) => void> {
   const estimate = Math.max(1, Math.ceil(estimatedTokens));
 
-  // A single request larger than the configured effective window can never
-  // fit. Do not spin forever waiting for a window that can never be large
-  // enough; tell the caller to lower context/output or raise the provider cap.
+  // IMPORTANT: this reservation is only a local Groq optimization. The actual
+  // provider is selected later by generateTextWithFallback/generateObjectWithFallback.
+  // Never hard-fail the whole generation here just because a Groq-safe budget
+  // is too small: Groq may be exhausted/unavailable and the same task may
+  // legitimately continue on Gemini or OpenRouter. A hard pre-provider error
+  // used to kill the fallback chain (for example at ~7,032 tokens vs 6,800).
+  // Let the provider router decide. If the request is larger than the local
+  // safe window, skip the local reservation and allow the selected provider
+  // to accept or reject it.
   if (estimate > EFFECTIVE_TPM_LIMIT) {
-    throw new Error(
-      `This AI request needs about ${estimate.toLocaleString()} tokens, but the configured safe per-minute limit is ${EFFECTIVE_TPM_LIMIT.toLocaleString()}. ` +
-      `Reduce project context/output or increase GROQ_TPM_LIMIT if your provider account allows it.`
+    console.warn(
+      `[Srizva] estimated request ${estimate.toLocaleString()} tokens exceeds the local Groq safe window ` +
+      `(${EFFECTIVE_TPM_LIMIT.toLocaleString()}); skipping local Groq reservation so provider fallback can continue.`
     );
+    return () => {};
   }
 
   for (;;) {

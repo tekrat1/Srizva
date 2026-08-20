@@ -1,5 +1,5 @@
-import { generateObject, generateText } from "ai";
-import { groq, MODEL_ID, AI_PROVIDER_OPTIONS } from "./groq";
+
+import { generateObjectWithFallback, generateTextWithFallback, MODEL_ID } from "./groq";
 import {
   TaskPlanSchema,
   addUsage,
@@ -15,9 +15,9 @@ import {
   editCoderSystemPrompt,
   editCoderTaskPrompt,
 } from "./prompts";
-import { withGroqRetry, type RetryOptions } from "./retry";
+import { type RetryOptions } from "./retry";
 import { qaCheckFile } from "./qa";
-import { reserveGroqBudget, estimateTokens, clampTokenBudget } from "./rateLimiter";
+import { clampTokenBudget } from "./rateLimiter";
 
 function stripFences(content: string): string {
   const trimmed = content.trim();
@@ -38,24 +38,16 @@ export async function planEdit(
   // reserved budget as a 10-file one, and the flat number was reserved
   // against Groq's TPM cap before the call even ran.
   const maxTokens = clampTokenBudget(400 + Object.keys(files).length * 180, 600, 2200);
-  const settle = await reserveGroqBudget(estimateTokens(prompt) + maxTokens, {
-    onWait: (waitMs, used, limit) =>
-      onRetry?.(0, waitMs, `Waiting for token window: ${used.toLocaleString()}/${limit.toLocaleString()} tokens are reserved. Edit will resume automatically.`),
-  });
+  // Provider fallback owns rate-limit handling.
+  const settle = (_actualTokens?: number) => {};
 
-  const { object, usage } = await withGroqRetry(
-    () =>
-      generateObject({
-        model: groq(MODEL_ID),
-        providerOptions: AI_PROVIDER_OPTIONS,
+  const { object, usage } = await generateObjectWithFallback({
         schema: TaskPlanSchema,
         prompt,
         // See CONTEXT_CHAR_BUDGET note below - Groq counts requested
         // completion tokens against the TPM cap up front.
         maxTokens,
-      }),
-    { onRetry }
-  );
+      });
   settle(usage.totalTokens ?? maxTokens);
   return { taskPlan: object, usage };
 }
@@ -131,24 +123,16 @@ export async function editFileOnce(
 
   let lastResult: { text: string; usage: CallUsage; finishReason?: string } | null = null;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const settle = await reserveGroqBudget(estimateTokens(system, prompt) + maxTokens, {
-      onWait: (waitMs, used, limit) =>
-        onRetry?.(0, waitMs, `Waiting for token window: ${used.toLocaleString()}/${limit.toLocaleString()} tokens are reserved. Edit will resume automatically.`),
-    });
-    const result = await withGroqRetry(
-      () =>
-        generateText({
-          model: groq(MODEL_ID),
-          providerOptions: AI_PROVIDER_OPTIONS,
-          system,
+    // Do not reserve Groq budget before provider selection; fallback may use Gemini/OpenRouter.
+    const settle = (_actualTokens?: number) => {};
+    const result = await generateTextWithFallback({
+              system,
           prompt:
             attempt === 0
               ? prompt
               : `${prompt}\n\nCRITICAL: The previous response was truncated. Return the COMPLETE file, preserving all existing behavior and finishing every statement/function.`,
           maxTokens,
-        }),
-      { onRetry }
-    );
+        });
     settle(result.usage.totalTokens ?? maxTokens);
     lastResult = result;
     if (result.finishReason !== "length") break;

@@ -1,8 +1,8 @@
-import { generateObject } from "ai";
-import { groq, MODEL_ID, AI_PROVIDER_OPTIONS } from "../groq";
+
+import { generateObjectWithFallback, type AIProviderName } from "../groq";
 import { z } from "zod";
-import { reserveGroqBudget, estimateTokens, clampTokenBudget } from "../rateLimiter";
-import { withGroqRetry, type RetryOptions } from "../retry";
+import { clampTokenBudget } from "../rateLimiter";
+import { type RetryOptions } from "../retry";
 import type { Plan, VirtualFS, CallUsage } from "../types";
 
 export const FinalReviewSchema = z.object({
@@ -16,8 +16,9 @@ export const FinalReviewSchema = z.object({
 export async function runFinalReview(
   plan: Plan,
   files: VirtualFS,
-  onRetry?: RetryOptions["onRetry"]
-): Promise<{ passed: boolean; issues: { path: string; message: string }[]; usage?: CallUsage }> {
+  onRetry?: RetryOptions["onRetry"],
+  preferredProvider?: AIProviderName | null
+): Promise<{ passed: boolean; issues: { path: string; message: string }[]; usage?: CallUsage; providerUsed?: AIProviderName }> {
   const chunks: string[] = [];
   let used = 0;
   for (const [path, content] of Object.entries(files)) {
@@ -40,24 +41,18 @@ PROJECT:
 ${manifest}`;
 
   const maxTokens = clampTokenBudget(500 + Object.keys(files).length * 40, 600, 1000);
-  const settle = await reserveGroqBudget(estimateTokens(prompt) + maxTokens, {
-    onWait: (waitMs, used, limit) =>
-      onRetry?.(0, waitMs, `Waiting for token window: ${used.toLocaleString()}/${limit.toLocaleString()} tokens are reserved. Final review will resume automatically.`),
-  });
+  // Final review is provider-fallback aware; never block before selecting a provider.
+  const settle = (_actualTokens?: number) => {};
 
   try {
-    const { object, usage } = await withGroqRetry(
-      () => generateObject({
-        model: groq(MODEL_ID),
-        providerOptions: AI_PROVIDER_OPTIONS,
+    const { object, usage, providerUsed } = await generateObjectWithFallback({
+        
         schema: FinalReviewSchema,
         prompt,
         maxTokens,
-      }),
-      { onRetry }
-    );
+      }, preferredProvider);
     settle(usage.totalTokens ?? maxTokens);
-    return { ...object, usage };
+    return { ...object, usage, providerUsed };
   } catch (error) {
     // Final review is a quality enhancement, not a reason to discard a
     // project that already passed deterministic validation.

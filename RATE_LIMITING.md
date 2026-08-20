@@ -14,7 +14,7 @@ Srizva now treats provider rate limits as a scheduling problem instead of a fata
 ## Environment variables
 
 ```env
-AI_PROVIDER=groq
+AI_PROVIDER=auto
 GROQ_API_KEY=...
 GROQ_TPM_LIMIT=8000
 GROQ_RPM_LIMIT=30
@@ -29,3 +29,15 @@ AI_REASONING_EFFORT=low
 A rate limiter cannot create additional provider quota. If a build needs 25K tokens and the account allows only 8K TPM, the build must take multiple rate-limit windows. Srizva now waits and resumes instead of failing halfway through.
 
 For horizontally scaled deployments, the in-memory limiter is only a local first line of defense. The provider's 429/reset headers remain authoritative; a shared Redis/Upstash limiter can be added later if many server instances share one API key.
+
+
+## Multi-provider failover
+
+`AI_PROVIDER=auto` plus `SRIZVA_PROVIDER_ORDER=groq,gemini,openrouter` enables failover for the current generation task. The router is a per-request circuit breaker: once a provider returns a daily quota, 429/rate-limit, 5xx/high-demand, timeout, or unavailable-model error, that provider is skipped for the remainder of that generation request.
+
+The Vercel AI SDK retry count is explicitly set to `0` inside the fallback calls. This is intentional: otherwise the SDK can retry the same failed provider before the Srizva router gets a chance to switch to the next provider.
+
+
+## Provider fallback behavior
+
+The local Groq limiter is intentionally non-blocking when a request is larger than its safe window. Provider selection must happen before a Groq-specific limit can terminate a task. Quota/429/503/high-demand errors are handled by the multi-provider circuit breaker in `lib/agent/groq.ts`, which moves the same task to the next configured provider.

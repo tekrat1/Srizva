@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Download, Loader2 } from "lucide-react";
 import type { VirtualFS } from "@/lib/agent/types";
+import { hasToolCallArtifacts, sanitizeToolCallArtifacts } from "@/lib/agent/sanitize";
 
 export default function DownloadZipButton({
   files,
@@ -31,7 +32,11 @@ export default function DownloadZipButton({
       for (const [path, content] of entries) {
         // Normalize accidental leading slashes so the archive always extracts
         // into a normal project directory rather than an absolute path.
-        zip.file(path.replace(/^\/+/, ""), content);
+        // Also defensively clean any leaked tool-call protocol text (older
+        // generations, or a variant the coder-side sanitizer didn't catch)
+        // so the downloaded ZIP never contains `<|tool_call_start|>...` junk.
+        const clean = hasToolCallArtifacts(content) ? sanitizeToolCallArtifacts(content) : content;
+        zip.file(path.replace(/^\/+/, ""), clean);
       }
 
       const blob = await zip.generateAsync({

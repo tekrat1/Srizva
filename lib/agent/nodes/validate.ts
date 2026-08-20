@@ -1,4 +1,4 @@
-import { qaCheckFile } from "../qa";
+import { qaCheckFile, qaCheckProject } from "../qa";
 import type { VirtualFS } from "../types";
 import type { ValidationIssue } from "../graph/state";
 
@@ -9,6 +9,19 @@ export function validateProject(files: VirtualFS): ValidationIssue[] {
     for (const issue of qaCheckFile(path, content)) {
       issues.push({ path, message: issue.message, kind: "qa" });
     }
+  }
+
+  // Cross-file contract QA catches the class of bug that syntax parsing
+  // cannot see: HTML and JS both parse, but their ids, handlers, and core
+  // interaction logic do not agree.
+  const projectIssues = qaCheckProject(files);
+  for (const issue of projectIssues) {
+    const path =
+      Object.keys(files).find((p) => /\.html?$/i.test(p)) ??
+      Object.keys(files).find((p) => /\.(?:js|mjs)$/i.test(p)) ??
+      Object.keys(files)[0] ??
+      "index.html";
+    issues.push({ path, message: issue.message, kind: "integration" });
   }
 
   const paths = new Set(Object.keys(files));

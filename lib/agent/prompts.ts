@@ -75,6 +75,7 @@ Rules:
 - If you are writing the HTML file, do NOT inline any CSS in a <style> tag or any JS in a <script> tag - link to the separate .css/.js files listed in the plan via <link rel="stylesheet"> and <script src>.
 - Write production-quality, working code. No placeholders like "// TODO" for core functionality.
 - Do not wrap the output in \`\`\` fences. Return raw file content exactly as it should be saved to disk.
+- CRITICAL: Never emit tool-call, function-call, or internal protocol syntax (e.g. \`<|tool_call_start|>\`, \`[write(file='...')]\`, JSON tool-call objects, or any similar wrapper). This is not a tool-use turn - respond with ONLY the plain file content, nothing else, no matter what format you were trained to use for file writes.
 
 ${IMAGE_RULES}
 
@@ -111,6 +112,7 @@ Rules:
 - Output the FULL new content of the file - no explanations, no markdown code fences, no commentary, no diff syntax.
 - The file must still integrate correctly with the rest of the project (matching import paths, element ids/classes, function names, etc.).
 - Do not wrap the output in \`\`\` fences. Return raw file content exactly as it should be saved to disk.
+- CRITICAL: Never emit tool-call, function-call, or internal protocol syntax (e.g. \`<|tool_call_start|>\`, \`[write(file='...')]\`, JSON tool-call objects, or any similar wrapper). This is not a tool-use turn - respond with ONLY the plain file content, nothing else, no matter what format you were trained to use for file writes.
 - If the current file has broken local image paths (e.g. "images/x.jpg") or generic default styling, fix them per the rules below even if not explicitly asked, as long as it doesn't conflict with the requested change.
 - If you are writing CSS/JS, every selector must exactly match a class/id that actually exists in the current HTML shown below - never invent or guess one. If you are changing HTML and it breaks an existing CSS/JS selector, either keep the old class name or note in your output (as an HTML comment) that the other file also needs updating.
 

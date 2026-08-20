@@ -3,6 +3,25 @@
 import { useEffect, useMemo, useState } from "react";
 import { ExternalLink, Smartphone, Tablet, Monitor } from "lucide-react";
 import type { VirtualFS } from "@/lib/agent/types";
+import { hasToolCallArtifacts, sanitizeToolCallArtifacts } from "@/lib/agent/sanitize";
+
+// Defensive cleanup for files generated before the coder-side sanitizer
+// existed (or any variant it didn't catch): strip leaked tool-call
+// protocol tokens so the preview never shows raw `<|tool_call_start|>...`
+// text instead of the actual page.
+function cleanFiles(files: VirtualFS): VirtualFS {
+  let changed = false;
+  const cleaned: VirtualFS = {};
+  for (const [path, content] of Object.entries(files)) {
+    if (typeof content === "string" && hasToolCallArtifacts(content)) {
+      cleaned[path] = sanitizeToolCallArtifacts(content);
+      changed = true;
+    } else {
+      cleaned[path] = content;
+    }
+  }
+  return changed ? cleaned : files;
+}
 
 /**
  * Zero-dependency static preview.
@@ -94,7 +113,7 @@ const DEVICE_FRAMES: Record<DeviceWidth, { label: string; icon: typeof Monitor; 
 };
 
 export default function LivePreview({ files }: { files: VirtualFS }) {
-  const html = useMemo(() => buildPreviewHtml(files), [files]);
+  const html = useMemo(() => buildPreviewHtml(cleanFiles(files)), [files]);
   const [device, setDevice] = useState<DeviceWidth>("desktop");
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
 
