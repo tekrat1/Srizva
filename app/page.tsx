@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
 import AuthAura from "@/components/auth/AuthAura";
 import { getCurrentUser } from "@/lib/actions/auth";
 
@@ -72,6 +73,8 @@ export default async function LandingPage() {
             ))}
           </div>
         </main>
+
+        <Footer />
       </div>
     </div>
   );

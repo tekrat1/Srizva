@@ -23,9 +23,19 @@ export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  // Only relevant in sign-up mode — existing users already agreed once.
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    if (mode === "sign-up" && !agreedToTerms) {
+      toast.error(
+        "Please confirm you're 18+ and agree to the Terms and Privacy Policy."
+      );
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -57,6 +67,13 @@ export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   }
 
   async function handleGoogleSignIn() {
+    if (mode === "sign-up" && !agreedToTerms) {
+      toast.error(
+        "Please confirm you're 18+ and agree to the Terms and Privacy Policy."
+      );
+      return;
+    }
+
     setGoogleLoading(true);
 
     try {
@@ -150,9 +167,39 @@ export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
         </div>
       </div>
 
+      {mode === "sign-up" && (
+        <label className="flex items-start gap-2.5 text-sm text-muted">
+          <input
+            type="checkbox"
+            checked={agreedToTerms}
+            onChange={(e) => setAgreedToTerms(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-border bg-background/80 accent-primary"
+          />
+          <span>
+            I confirm I&apos;m at least 18 years old and agree to the{" "}
+            <Link
+              href="/terms"
+              target="_blank"
+              className="text-white hover:text-primary"
+            >
+              Terms of Service
+            </Link>{" "}
+            and{" "}
+            <Link
+              href="/privacy"
+              target="_blank"
+              className="text-white hover:text-primary"
+            >
+              Privacy Policy
+            </Link>
+            .
+          </span>
+        </label>
+      )}
+
       <button
         type="submit"
-        disabled={loading}
+        disabled={loading || (mode === "sign-up" && !agreedToTerms)}
         className="btn-aurora group flex w-full items-center justify-center gap-2 rounded-lg py-2.5 font-medium text-white transition-[background-position,opacity] duration-500 hover:animate-shimmer disabled:opacity-60"
       >
         {loading && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -172,7 +219,9 @@ export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
       <button
         type="button"
         onClick={handleGoogleSignIn}
-        disabled={loading || googleLoading}
+        disabled={
+          loading || googleLoading || (mode === "sign-up" && !agreedToTerms)
+        }
         className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-border bg-background/80 py-2.5 font-medium transition-colors hover:bg-surface disabled:opacity-60"
       >
         {googleLoading ? (

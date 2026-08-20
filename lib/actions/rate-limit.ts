@@ -12,7 +12,7 @@ import { adminDb } from "@/lib/firebase/admin";
  * you need per-minute granularity later.
  */
 
-const DAILY_GENERATION_LIMIT = Number(process.env.DAILY_GENERATION_LIMIT ?? 20);
+const DAILY_GENERATION_LIMIT = Number(process.env.DAILY_GENERATION_LIMIT ?? 1);
 const DAILY_EDIT_LIMIT = Number(process.env.DAILY_EDIT_LIMIT ?? 40);
 
 function todayKey(): string {

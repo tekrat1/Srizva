@@ -51,7 +51,15 @@ function logLineMeta(line: string) {
   return { Icon: Loader2, className: "text-muted" };
 }
 
-export default function GenerationWorkbench() {
+export default function GenerationWorkbench({
+  initialGenerationsUsed = 0,
+  generationsLimit = 1,
+}: {
+  /** How many generations this user has already used today (server-checked). */
+  initialGenerationsUsed?: number;
+  /** Daily free-tier generation limit — see lib/actions/rate-limit.ts. */
+  generationsLimit?: number;
+}) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
   const [editInstruction, setEditInstruction] = useState("");
@@ -64,6 +72,11 @@ export default function GenerationWorkbench() {
   const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
   const [applying, setApplying] = useState(false);
   const [versionRefresh, setVersionRefresh] = useState(0);
+  // Locks the generate form once the free-tier daily cap is hit — either
+  // because the server told us so on page load, or because this tab just
+  // used its one generation. Resets automatically at UTC midnight server-side.
+  const [generationsUsed, setGenerationsUsed] = useState(initialGenerationsUsed);
+  const isLocked = generationsUsed >= generationsLimit;
   const filesRef = useRef<VirtualFS>({});
   const planRef = useRef<Plan | null>(null);
   const lastInstructionRef = useRef("");
@@ -93,6 +106,12 @@ export default function GenerationWorkbench() {
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
     if (!prompt.trim() || phase === "generating") return;
+    if (isLocked) {
+      toast.error(
+        "Free tier limited — Srizva is still in production, more features coming soon! You've used today's free generation. Come back tomorrow and it'll unlock again."
+      );
+      return;
+    }
 
     setPhase("generating");
     setLog([]);
@@ -116,8 +135,16 @@ export default function GenerationWorkbench() {
 
       if (!res.ok || !res.body) {
         const body = await res.json().catch(() => ({}));
+        if (body.code === "DAILY_LIMIT_REACHED") {
+          setGenerationsUsed(generationsLimit);
+        }
         throw new Error(body.error || "Failed to start generation");
       }
+
+      // Server already counted this attempt against today's cap the
+      // moment it accepted the request — mirror that here so the UI
+      // locks even if this generation later errors out mid-stream.
+      setGenerationsUsed((u) => u + 1);
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -366,20 +393,40 @@ export default function GenerationWorkbench() {
         <WaterBottle progress={bottleLevel} phase={phase} />
       </div>
 
+      {isLocked && (
+        <div className="flex items-start gap-3 rounded-xl border border-aurora-amber/30 bg-aurora-amber/[0.08] p-4 text-sm">
+          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-aurora-amber" />
+          <div>
+            <p className="font-medium text-foreground">
+              Free tier limited — you&apos;ve used today&apos;s free generation
+            </p>
+            <p className="mt-1 text-muted">
+              Srizva is still in production, more features coming soon! For
+              now, you can create 1 project per day on the free tier. Come
+              back tomorrow and it&apos;ll unlock again.
+            </p>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleGenerate} className="group relative flex gap-2">
         <div className="relative flex-1">
           <Wand2 className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted transition-colors group-focus-within:text-aurora-violet" />
           <input
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="e.g. A pomodoro timer app with a clean minimal UI"
-            disabled={phase === "generating"}
+            placeholder={
+              isLocked
+                ? "Free generation used for today — back tomorrow"
+                : "e.g. A pomodoro timer app with a clean minimal UI"
+            }
+            disabled={phase === "generating" || isLocked}
             className="w-full rounded-xl border border-border bg-surface py-3 pl-10 pr-4 text-sm outline-none transition-shadow focus:border-aurora-violet/60 focus:shadow-[0_0_0_4px_rgba(139,92,246,0.15)] disabled:opacity-50"
           />
         </div>
         <button
           type="submit"
-          disabled={phase === "generating" || !prompt.trim()}
+          disabled={phase === "generating" || !prompt.trim() || isLocked}
           className="btn-aurora relative flex items-center gap-2 overflow-hidden rounded-xl px-5 py-3 text-sm font-medium text-white shadow-[0_4px_20px_rgba(139,92,246,0.35)] transition-transform hover:scale-[1.02] disabled:pointer-events-none disabled:opacity-50"
         >
           {phase === "generating" && (
@@ -390,11 +437,11 @@ export default function GenerationWorkbench() {
           ) : (
             <Sparkles className="h-4 w-4" />
           )}
-          <span className="relative">Generate</span>
+          <span className="relative">{isLocked ? "Locked" : "Generate"}</span>
         </button>
       </form>
 
-      {phase === "idle" && log.length === 0 && !hasFiles && (
+      {phase === "idle" && log.length === 0 && !hasFiles && !isLocked && (
         <PromptGallery onSelect={(p) => setPrompt(p)} />
       )}
 

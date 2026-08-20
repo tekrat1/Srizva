@@ -34,7 +34,11 @@ export async function POST(req: NextRequest) {
   const limit = await checkGenerationLimit(user.uid);
   if (!limit.allowed) {
     return new Response(
-      JSON.stringify({ error: "Daily generation limit reached. Try again tomorrow." }),
+      JSON.stringify({
+        error:
+          "Free tier limited — Srizva is still in production, more features coming soon! You can create 1 project per day for now. Come back tomorrow and it'll unlock again.",
+        code: "DAILY_LIMIT_REACHED",
+      }),
       { status: 429 }
     );
   }
