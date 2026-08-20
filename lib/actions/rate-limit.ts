@@ -6,13 +6,16 @@ import { adminDb } from "@/lib/firebase/admin";
  * Simple daily counter per user, stored in Firestore.
  *
  * This is deliberately basic (not a sliding window, no Redis) - it resets
- * at UTC midnight and is good enough to stop a single account from burning
- * through your Groq free-tier limit or racking up a bill once you add a
- * payment method there. Swap for a proper rate limiter (e.g. Upstash) if
- * you need per-minute granularity later.
+ * at UTC midnight. The generation route no longer enforces a block on
+ * this (the "1 project per day" cap was removed), but the counter is
+ * still tracked here so the usage meters in the nav/dashboard have real
+ * numbers to show. checkGenerationLimit() itself is unused by the
+ * generate API route now; getUsageStatus() (read-only) is what's
+ * actually displayed. Swap for a proper rate limiter (e.g. Upstash) if
+ * you want real enforcement again later.
  */
 
-const DAILY_GENERATION_LIMIT = Number(process.env.DAILY_GENERATION_LIMIT ?? 1);
+const DAILY_GENERATION_LIMIT = Number(process.env.DAILY_GENERATION_LIMIT ?? 1000);
 const DAILY_EDIT_LIMIT = Number(process.env.DAILY_EDIT_LIMIT ?? 40);
 
 function todayKey(): string {

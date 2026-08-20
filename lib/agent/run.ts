@@ -6,6 +6,41 @@ import { addUsage, emptyUsage, type GenerationEvent, type ImplementationTask, ty
 import type { RetryOptions } from "./retry";
 import { MODEL_ID } from "./groq";
 
+/**
+ * The Planner prompt instructs the model to ALWAYS list at least
+ * index.html, style.css, and script.js (see IMAGE_RULES/plannerPrompt in
+ * prompts.ts) - but it's a small/fast Groq model and instruction-following
+ * isn't perfect, so it occasionally returns a plan with just 1 file (only
+ * the HTML). Previously that silently produced an HTML-only project with
+ * no CSS/JS at all, because the "skip Architect for trivial single-file
+ * plans" shortcut below trusted the model's file list unconditionally.
+ *
+ * This normalizes the plan BEFORE that shortcut runs: if the plan is
+ * missing a stylesheet and/or a script file, add them. This guarantees
+ * every generation produces all three files, regardless of what the
+ * Planner actually returned.
+ */
+function ensureCoreStaticFiles(plan: Plan): Plan {
+  const paths = plan.files.map((f) => f.path.toLowerCase());
+  const hasHtml = paths.some((p) => p.endsWith(".html"));
+  const hasCss = paths.some((p) => p.endsWith(".css"));
+  const hasJs = paths.some((p) => p.endsWith(".js"));
+
+  const files = [...plan.files];
+  if (!hasHtml) {
+    files.unshift({ path: "index.html", purpose: plan.description });
+  }
+  if (!hasCss) {
+    files.push({ path: "style.css", purpose: "Styling for the page (palette, typography, layout, spacing, motion)." });
+  }
+  if (!hasJs) {
+    files.push({ path: "script.js", purpose: "Interactivity and behavior for the page." });
+  }
+
+  if (files.length === plan.files.length) return plan;
+  return { ...plan, files };
+}
+
 // How many total coder attempts a single file gets before we give up and
 // ship the last draft anyway (flagged, not silently). 1 initial attempt +
 // this many repair retries.
@@ -88,8 +123,12 @@ export async function generateProject(
 
   try {
     emit({ type: "status", message: "Planning your project..." });
-    const { plan, usage: plannerUsage } = await runPlanner(userPrompt, onRetry);
+    const { plan: rawPlan, usage: plannerUsage } = await runPlanner(userPrompt, onRetry);
     addUsage(usageTotals, plannerUsage);
+    // Guarantee HTML+CSS+JS are all present before anything downstream
+    // (including the single-file shortcut below) makes decisions based on
+    // plan.files - see ensureCoreStaticFiles() above for why.
+    const plan = ensureCoreStaticFiles(rawPlan);
     emit({ type: "plan", plan });
 
     emit({ type: "status", message: "Breaking the plan into build tasks..." });

@@ -2,7 +2,6 @@ import GenerationWorkbench from "@/components/GenerationWorkbench";
 import ProjectCard from "@/components/ProjectCard";
 import { listMyProjects } from "@/lib/actions/projects";
 import { getCurrentUser } from "@/lib/actions/auth";
-import { getUsageStatus } from "@/lib/actions/rate-limit";
 
 export default async function DashboardPage() {
   const [projects, user] = await Promise.all([
@@ -10,10 +9,6 @@ export default async function DashboardPage() {
     getCurrentUser(),
   ]);
   const firstName = user?.name?.split(" ")[0];
-  // Free tier: 1 generation/day, checked server-side here so the workbench
-  // can render already-locked on page load instead of only after a failed
-  // attempt. See lib/actions/rate-limit.ts.
-  const usage = user ? await getUsageStatus(user.uid) : null;
 
   return (
     <div className="space-y-12">
@@ -43,10 +38,7 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <GenerationWorkbench
-        initialGenerationsUsed={usage?.generate.used ?? 0}
-        generationsLimit={usage?.generate.limit ?? 1}
-      />
+      <GenerationWorkbench />
 
       {projects.length > 0 && (
         <div>
