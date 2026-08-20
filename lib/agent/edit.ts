@@ -224,9 +224,20 @@ export async function editProject(
 
     emit({ type: "done", files: updated, usage: usageTotals });
   } catch (err) {
-    emit({
-      type: "error",
-      message: err instanceof Error ? err.message : "Edit failed",
-    });
+    console.error("[editProject] failed:", err);
+
+    let message = "Edit failed";
+    if (err instanceof Error) {
+      message = err.message?.trim() ? err.message : err.name || "Edit failed";
+      const cause = (err as { cause?: unknown }).cause;
+      if (cause) {
+        const causeStr = cause instanceof Error ? cause.message : String(cause);
+        if (causeStr && causeStr !== message) message += ` (${causeStr})`;
+      }
+    } else if (err) {
+      message = String(err);
+    }
+
+    emit({ type: "error", message });
   }
 }

@@ -141,9 +141,30 @@ export async function generateProject(
 
     emit({ type: "done", files: fs, plan, usage: usageTotals });
   } catch (err) {
-    emit({
-      type: "error",
-      message: err instanceof Error ? err.message : "Generation failed",
-    });
+    // Log the FULL error server-side (terminal in dev, Vercel function logs
+    // in prod) - this is the only place that info is available. The
+    // previous version only ever sent err.message to the client and never
+    // logged anything here, so when a thrown error had an empty/missing
+    // .message (common for some SDK/network errors, e.g. AI_APICallError
+    // with no response body, or a bare `throw new Error()`), the terminal
+    // showed nothing at all and the client just rendered "Error:" with
+    // nothing after it - impossible to debug from either side.
+    console.error("[generateProject] failed:", err);
+
+    let message = "Generation failed";
+    if (err instanceof Error) {
+      message = err.message?.trim() ? err.message : err.name || "Generation failed";
+      // AI SDK errors often carry the actually useful detail in `cause`
+      // (e.g. the provider's raw response body) rather than `.message`.
+      const cause = (err as { cause?: unknown }).cause;
+      if (cause) {
+        const causeStr = cause instanceof Error ? cause.message : String(cause);
+        if (causeStr && causeStr !== message) message += ` (${causeStr})`;
+      }
+    } else if (err) {
+      message = String(err);
+    }
+
+    emit({ type: "error", message });
   }
 }

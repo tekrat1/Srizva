@@ -20,6 +20,8 @@
  * assuming everyone is on the free tier forever - see .env.local.example.
  */
 
+import { AI_PROVIDER } from "./groq";
+
 // .env.local.example ships these keys BLANK (e.g. "GROQ_TPM_LIMIT="). If that
 // line is left as-is, process.env.GROQ_TPM_LIMIT is "" - not undefined - so
 // the "?? 8000" fallback never kicks in and Number("") silently evaluates to
@@ -32,8 +34,18 @@ function envNumber(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-const TPM_LIMIT = envNumber(process.env.GROQ_TPM_LIMIT, 70000);
-const RPM_LIMIT = envNumber(process.env.GROQ_RPM_LIMIT, 30);
+// Per-provider free-tier defaults for openai/gpt-oss-120b (see groq.ts for
+// the full comparison). GROQ_TPM_LIMIT/GROQ_RPM_LIMIT env vars still
+// override either provider's default directly, if you know your account's
+// real numbers differ (e.g. a paid tier on either side).
+const DEFAULTS = {
+  groq: { tpm: 8000, rpm: 30 },
+  cerebras: { tpm: 30000, rpm: 5 },
+} as const;
+const providerDefaults = DEFAULTS[AI_PROVIDER];
+
+const TPM_LIMIT = envNumber(process.env.GROQ_TPM_LIMIT, providerDefaults.tpm);
+const RPM_LIMIT = envNumber(process.env.GROQ_RPM_LIMIT, providerDefaults.rpm);
 const WINDOW_MS = 60_000;
 
 interface LogEntry {

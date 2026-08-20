@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/actions/auth";
 import { checkEditLimit } from "@/lib/actions/rate-limit";
 import { editProject } from "@/lib/agent/edit";
 import type { Plan, VirtualFS } from "@/lib/agent/types";
+import { isProviderConfigured, requiredEnvVarName } from "@/lib/agent/groq";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -26,8 +27,8 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: "Missing current project files/plan" }), { status: 400 });
   }
 
-  if (!process.env.GROQ_API_KEY) {
-    return new Response(JSON.stringify({ error: "Server is missing GROQ_API_KEY" }), { status: 500 });
+  if (!isProviderConfigured) {
+    return new Response(JSON.stringify({ error: `Server is missing ${requiredEnvVarName}` }), { status: 500 });
   }
 
   const limit = await checkEditLimit(user.uid);

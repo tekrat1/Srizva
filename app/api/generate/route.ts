@@ -3,6 +3,7 @@ import { generateProject } from "@/lib/agent/run";
 import { getCurrentUser } from "@/lib/actions/auth";
 import { checkGenerationLimit } from "@/lib/actions/rate-limit";
 import type { GenerationEvent } from "@/lib/agent/types";
+import { isProviderConfigured, requiredEnvVarName } from "@/lib/agent/groq";
 
 export const runtime = "nodejs";
 export const maxDuration = 300; // generation can take a few minutes
@@ -23,9 +24,9 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  if (!process.env.GROQ_API_KEY) {
+  if (!isProviderConfigured) {
     return new Response(
-      JSON.stringify({ error: "Server is missing GROQ_API_KEY" }),
+      JSON.stringify({ error: `Server is missing ${requiredEnvVarName}` }),
       { status: 500 }
     );
   }
