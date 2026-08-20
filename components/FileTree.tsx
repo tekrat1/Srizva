@@ -17,8 +17,8 @@ export default function FileTree({ files }: { files: VirtualFS }) {
             onClick={() => setSelected(path)}
             className={`flex w-full items-center gap-2 truncate rounded px-2 py-1.5 text-left text-xs ${
               selected === path
-                ? "bg-primary/20 text-white"
-                : "text-muted hover:bg-white/5 hover:text-white"
+                ? "bg-primary/20 text-foreground"
+                : "text-muted hover:bg-white/5 hover:text-foreground"
             }`}
             title={path}
           >

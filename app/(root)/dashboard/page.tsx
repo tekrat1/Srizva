@@ -1,17 +1,40 @@
-import Link from "next/link";
+import { Sparkles } from "lucide-react";
 import GenerationWorkbench from "@/components/GenerationWorkbench";
+import ProjectCard from "@/components/ProjectCard";
 import { listMyProjects } from "@/lib/actions/projects";
+import { getCurrentUser } from "@/lib/actions/auth";
 
 export default async function DashboardPage() {
-  const projects = await listMyProjects();
+  const [projects, user] = await Promise.all([
+    listMyProjects(),
+    getCurrentUser(),
+  ]);
+  const firstName = user?.name?.split(" ")[0];
 
   return (
     <div className="space-y-12">
-      <div>
-        <h1 className="text-2xl font-semibold">What do you want to build?</h1>
-        <p className="mt-1 text-sm text-muted">
-          Describe it in a sentence. You&apos;ll see it get planned, coded, and previewed live.
-        </p>
+      <div className="relative -mx-6 -mt-4 overflow-hidden rounded-2xl px-6 pb-8 pt-10">
+        <div aria-hidden className="glow-wash pointer-events-none absolute inset-0" />
+        <div className="relative animate-fade-up">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface/80 px-3 py-1 text-[11px] font-medium tracking-wide text-muted backdrop-blur-sm">
+            <Sparkles className="h-3 w-3 text-aurora-violet" />
+            build mode
+          </span>
+          <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
+            What should we build
+            {firstName ? (
+              <>
+                , <span className="text-gradient-aurora">{firstName}</span>
+              </>
+            ) : (
+              ""
+            )}
+            ?
+          </h1>
+          <p className="mt-2 max-w-md text-sm text-muted">
+            Describe it in a sentence. You&apos;ll see it get planned, coded, and previewed live.
+          </p>
+        </div>
       </div>
 
       <GenerationWorkbench />
@@ -21,14 +44,12 @@ export default async function DashboardPage() {
           <h2 className="mb-3 text-sm font-medium text-muted">Your projects</h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {projects.map((p) => (
-              <Link
+              <ProjectCard
                 key={p.id}
-                href={`/project/${p.id}`}
-                className="rounded-lg border border-border bg-surface p-4 hover:border-primary"
-              >
-                <p className="truncate font-medium">{p.plan?.name ?? "Untitled"}</p>
-                <p className="mt-1 line-clamp-2 text-xs text-muted">{p.prompt}</p>
-              </Link>
+                id={p.id}
+                name={p.plan?.name ?? "Untitled"}
+                prompt={p.prompt}
+              />
             ))}
           </div>
         </div>

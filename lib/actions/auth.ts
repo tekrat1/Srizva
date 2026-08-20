@@ -35,7 +35,11 @@ export async function getCurrentUser() {
 
   try {
     const decoded = await adminAuth.verifySessionCookie(sessionCookie, true);
-    return { uid: decoded.uid, email: decoded.email ?? null };
+    return {
+      uid: decoded.uid,
+      email: decoded.email ?? null,
+      name: (decoded.name as string | undefined) ?? null,
+    };
   } catch {
     // No session, invalid session, or Firebase not configured yet -
     // treat all as "not logged in" rather than crashing the page.

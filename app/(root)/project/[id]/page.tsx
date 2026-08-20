@@ -12,5 +12,16 @@ export default async function ProjectPage({
 
   if (!project) notFound();
 
-  return <ProjectViewer plan={project.plan} files={project.files} />;
+  // `key` forces React to fully remount ProjectViewer when navigating from
+  // one project to another instead of reusing the old instance's state.
+  return (
+    <ProjectViewer
+      key={project.id}
+      id={project.id}
+      plan={project.plan}
+      files={project.files}
+      isPublic={project.isPublic}
+      shareId={project.shareId}
+    />
+  );
 }

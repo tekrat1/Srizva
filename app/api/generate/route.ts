@@ -1,11 +1,20 @@
 import { NextRequest } from "next/server";
 import { generateProject } from "@/lib/agent/run";
+import { getCurrentUser } from "@/lib/actions/auth";
+import { checkGenerationLimit } from "@/lib/actions/rate-limit";
 import type { GenerationEvent } from "@/lib/agent/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 300; // generation can take a few minutes
 
 export async function POST(req: NextRequest) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return new Response(JSON.stringify({ error: "Not authenticated" }), {
+      status: 401,
+    });
+  }
+
   const { prompt } = await req.json();
 
   if (!prompt || typeof prompt !== "string" || prompt.trim().length < 3) {
@@ -18,6 +27,14 @@ export async function POST(req: NextRequest) {
     return new Response(
       JSON.stringify({ error: "Server is missing GROQ_API_KEY" }),
       { status: 500 }
+    );
+  }
+
+  const limit = await checkGenerationLimit(user.uid);
+  if (!limit.allowed) {
+    return new Response(
+      JSON.stringify({ error: "Daily generation limit reached. Try again tomorrow." }),
+      { status: 429 }
     );
   }
 

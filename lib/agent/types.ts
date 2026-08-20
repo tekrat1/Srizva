@@ -37,12 +37,45 @@ export type ImplementationTask = z.infer<typeof ImplementationTaskSchema>;
 // ---- Virtual file system used during generation ----
 export type VirtualFS = Record<string, string>; // path -> file content
 
+// ---- Token usage, accumulated across every LLM call in a pipeline run ----
+/** Shape returned by the `ai` SDK's `usage` field on generateText/generateObject. */
+export interface CallUsage {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+}
+
+export interface UsageTotals {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  /** Number of individual LLM calls this run made (incl. QA repairs/retries). */
+  calls: number;
+  model: string;
+}
+
+export function emptyUsage(model: string): UsageTotals {
+  return { promptTokens: 0, completionTokens: 0, totalTokens: 0, calls: 0, model };
+}
+
+export function addUsage(totals: UsageTotals, usage: CallUsage | undefined): void {
+  if (!usage) return;
+  totals.promptTokens += usage.promptTokens ?? 0;
+  totals.completionTokens += usage.completionTokens ?? 0;
+  totals.totalTokens +=
+    usage.totalTokens ?? (usage.promptTokens ?? 0) + (usage.completionTokens ?? 0);
+  totals.calls += 1;
+}
+
 // ---- Streamed progress events (sent to the client over SSE) ----
 export type GenerationEvent =
   | { type: "status"; message: string }
+  | { type: "rate_limited"; message: string; waitMs: number }
   | { type: "plan"; plan: Plan }
   | { type: "task_plan"; taskPlan: TaskPlan }
   | { type: "file_start"; path: string; index: number; total: number }
+  | { type: "qa_issue"; path: string; issues: string[]; attempt: number }
+  | { type: "qa_pass"; path: string }
   | { type: "file_done"; path: string; content: string }
-  | { type: "done"; files: VirtualFS; plan: Plan }
+  | { type: "done"; files: VirtualFS; plan: Plan; usage: UsageTotals }
   | { type: "error"; message: string };

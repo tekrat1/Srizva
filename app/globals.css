@@ -3,8 +3,29 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Dark theme (default) */
+    --color-background: 11 13 16; /* #0b0d10 */
+    --color-surface: 20 23 28; /* #14171c */
+    --color-border: 34 38 45; /* #22262d */
+    --color-muted: 139 143 151; /* #8b8f97 */
+    --color-foreground: 255 255 255;
+  }
+
+  /* Applied to <html> when the person picks "Light" on the onboarding
+     style step (see components/onboarding). Auth/landing/onboarding
+     screens keep their own dark aurora canvas regardless — only the
+     signed-in app shell (dashboard, navbar, project views) reads this. */
+  .theme-light {
+    --color-background: 247 247 249; /* #f7f7f9 */
+    --color-surface: 255 255 255; /* #ffffff */
+    --color-border: 226 227 231; /* #e2e3e7 */
+    --color-muted: 100 103 112; /* #646770 */
+    --color-foreground: 15 16 20; /* #0f1014 */
+  }
+
   body {
-    @apply bg-background text-white antialiased;
+    @apply bg-background text-foreground antialiased;
   }
 }
 
@@ -15,4 +36,201 @@
 .scrollbar-thin::-webkit-scrollbar-thumb {
   background: #2a2f37;
   border-radius: 999px;
+}
+
+/* ---------------------------------------------------------------- */
+/* Aurora backdrop (auth screens + landing hero)                    */
+/* ---------------------------------------------------------------- */
+
+/* Subtle film-grain texture so the flat dark background doesn't
+   look sterile. Pure CSS, no image asset required. */
+.bg-grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Radial fade so the orbiting cards stay clear of the centered
+   headline/card — fully hidden through the middle, fading in only
+   toward the corners — instead of clipping abruptly at the edges. */
+.aurora-fade {
+  -webkit-mask-image: radial-gradient(
+    circle at center,
+    transparent 0%,
+    transparent 34%,
+    black 62%,
+    black 100%
+  );
+  mask-image: radial-gradient(
+    circle at center,
+    transparent 0%,
+    transparent 34%,
+    black 62%,
+    black 100%
+  );
+}
+
+.text-gradient-aurora {
+  background-image: linear-gradient(
+    90deg,
+    theme("colors.aurora.cyan"),
+    theme("colors.aurora.violet"),
+    theme("colors.aurora.rose")
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.btn-aurora {
+  background-image: linear-gradient(
+    100deg,
+    theme("colors.aurora.violet"),
+    theme("colors.aurora.rose"),
+    theme("colors.aurora.violet")
+  );
+  background-size: 200% 100%;
+}
+
+.glass-panel {
+  background: rgba(20, 23, 28, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Defined directly (rather than only via the Tailwind `animation`
+   theme key) because these two are referenced through inline
+   `style={{ animation: ... }}` on the orbit rings, where Tailwind's
+   class-based purge can't detect the reference. */
+@keyframes orbit-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes orbit-spin-reverse {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+/* ---------------------------------------------------------------- */
+/* Water bottle widget (generation-progress mascot)                 */
+/* ---------------------------------------------------------------- */
+
+@keyframes wave-spin {
+  from {
+    transform: translate(-50%, 0) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, 0) rotate(360deg);
+  }
+}
+
+.wave-layer {
+  position: absolute;
+  left: 50%;
+  top: -0.65rem;
+  width: 165%;
+  aspect-ratio: 1 / 1;
+  border-radius: 45%;
+  transform: translate(-50%, 0);
+}
+.wave-layer-1 {
+  background: rgba(34, 211, 238, 0.55);
+  animation: wave-spin 6.5s linear infinite;
+}
+.wave-layer-2 {
+  background: rgba(139, 92, 246, 0.5);
+  animation: wave-spin 9s linear infinite reverse;
+  opacity: 0.75;
+}
+
+@keyframes bubble-rise {
+  0% {
+    transform: translateY(0) scale(0.6);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.85;
+  }
+  90% {
+    opacity: 0.25;
+  }
+  100% {
+    transform: translateY(-100px) scale(1);
+    opacity: 0;
+  }
+}
+.bottle-bubble {
+  animation: bubble-rise 3.2s ease-in infinite;
+}
+
+@keyframes cap-jiggle {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-3deg);
+  }
+}
+.bottle-cap-active {
+  animation: cap-jiggle 2.4s ease-in-out infinite;
+}
+
+@keyframes drip-fall {
+  0% {
+    transform: translateY(0);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+}
+.bottle-drip {
+  animation: drip-fall 1.1s ease-in infinite;
+}
+
+/* Log terminal line entrance */
+@keyframes line-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.log-line-in {
+  animation: line-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Soft ambient glow wash used behind headers/panels on the app shell */
+.glow-wash {
+  background: radial-gradient(
+      circle at 15% 20%,
+      rgba(139, 92, 246, 0.16),
+      transparent 45%
+    ),
+    radial-gradient(circle at 85% 0%, rgba(34, 211, 238, 0.14), transparent 40%),
+    radial-gradient(circle at 60% 100%, rgba(251, 113, 133, 0.1), transparent 40%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }

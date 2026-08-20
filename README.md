@@ -34,9 +34,42 @@ isolated from each other with no shared state to clean up.
 ## Live preview (`components/LivePreview.tsx`)
 
 - The generated `index.html` has its local `<link rel="stylesheet">` and `<script src="...">` tags inlined with the matching file content from the in-memory file map (external CDN links/scripts are left as-is).
+
+## Public share links
+
+Toggling "Share" on a project (`components/ShareButton.tsx`) sets `isPublic: true` and a permanent random `shareId` on the project doc, and `/share/[shareId]` (no auth) renders a read-only `LivePreview` for anyone with the link via `getPublicProject`. This query filters on `shareId == ... AND isPublic == true`, so Firestore needs a composite index on the `projects` collection (`shareId` Ascending, `isPublic` Ascending) — already declared in `firestore.indexes.json` below.
+
+## Firestore composite indexes
+
+A few queries filter on one field and sort on another (`where(...).orderBy(...)`), which Firestore can't satisfy with its automatic single-field indexes — it needs a composite index created once per query shape. These are declared in `firestore.indexes.json`:
+
+- `projects`: `userId` (asc) + `createdAt` (desc) — used by `listMyProjects()` (dashboard, `/usage`)
+- `projects`: `shareId` (asc) + `isPublic` (asc) — used by `getPublicProject()` (`/share/[shareId]`)
+- `build_stats`: `userId` (asc) + `createdAt` (desc) — used by `getMyStats()` (`/stats`)
+
+Deploy them with the Firebase CLI:
+
+```
+firebase deploy --only firestore:indexes
+```
+
+Or, the first time a missing-index error shows up in the server logs, Firestore includes a direct console link that pre-fills and creates that specific index for you — either approach works, but `firestore.indexes.json` keeps them reproducible across environments instead of being created ad hoc by whoever hits the error first.
 - The combined HTML is rendered via `<iframe srcDoc="...">`, sandboxed with `allow-scripts allow-forms allow-popups allow-modals`.
 - No install step, no bundler, no sandbox runtime to boot — preview is effectively instant and runs entirely inside the visitor's own browser tab, never on your server.
 - No third-party licensing involved at any usage scale — safe to run commercially.
+
+---
+
+## Build receipt, lifetime stats & badges
+
+- `lib/water.ts` is the single source of truth for the water-usage joke constants (`BOTTLE_ML` = 500, `EDIT_ML` = 150) — both client components (`WaterBottle`, `ReceiptCard`) and server actions (`lib/actions/stats.ts`) import from here so the numbers never drift apart.
+- After every generation, `lib/agent/run.ts` (and `lib/agent/edit.ts` for edits) accumulates real Groq token usage across every LLM call in the run — including QA-repair retries — and emits it as `usage: UsageTotals` on the `done` SSE event. `GenerationWorkbench.tsx` forwards this into `saveProject`/`updateProject` (`lib/actions/projects.ts`), which persists `tokensUsed`/`model`/`generationTimeMs` on the project doc and calls `recordBuildStat` (best-effort — a stats-write failure never fails the actual save).
+- `ReceiptCard.tsx` renders the "Spotify Wrapped"-style shareable receipt (prompt, file count, build time, real model + token count, and the mL water joke) right after a fresh generation finishes, with Download and native `navigator.share` buttons.
+- `lib/actions/stats.ts` maintains one `user_stats/{uid}` doc per user (lifetime mL, total builds/generates/edits/files, UTC-day build streak, longest streak, earned badge ids) plus a bounded `build_stats` history collection (most recent 50 builds kept, older ones pruned) for the "recent activity" table on `/stats`.
+  - **Firestore composite index needed**: `build_stats` collection, `userId` Ascending + `createdAt` Descending — used both by the recent-activity query and by the pruning query. Firestore will show a "create index" link in the server console the first time a build completes; click it, or add the index in `firestore.indexes.json` if you manage indexes as code.
+  - Streak logic: same UTC day = no change, exactly one day later = streak+1, any bigger gap = streak resets to 1.
+  - 7 badges (`computeBadges()`): First Sip, Efficient Sipper (<20s build), Chugged the Whole Bottle (15+ files in one generation), Hydration Streak (3-day streak), Water Cooler Regular (7-day streak), Bottomless Bottle (20+ lifetime bottles), Tinkerer (10+ edits). Badges are additive — once earned they're kept even if a streak later resets.
+- `/stats` (`app/(root)/stats/page.tsx`) renders the headline numbers, badge grid, and recent-activity table server-side via `getMyStats()`.
 
 ---
 
@@ -70,6 +103,12 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
       allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
     }
+    // rate_limits is only ever touched by the admin SDK (server-side), which
+    // bypasses these rules entirely - this just makes sure no client can
+    // read or tamper with usage counters directly.
+    match /rate_limits/{docId} {
+      allow read, write: if false;
+    }
   }
 }
 ```
@@ -99,8 +138,8 @@ Open http://localhost:3000, sign up, and try a prompt like:
 
 ## Not yet built (roadmap)
 
-- Rate limiting on the generate endpoint
-- Iterating on an existing project ("now make the button blue") instead of only fresh generations
+- Real backend generation (e.g. Supabase-wired projects for DB/auth/storage) - still static HTML/CSS/JS only
+- Real payment/billing integration (Stripe) - a per-user daily usage cap now exists (`lib/actions/rate-limit.ts`) to protect your Groq quota, but there's no paid-tier upsell flow yet
 - Password strength checks on sign-up
 - Deleting/renaming projects, shareable public preview links
-- Smarter context selection for the coder step on larger projects
+- Smarter context selection for the coder step on very large projects (current approach sends full file content up to a ~40k character budget, which covers small/medium projects but will start truncating on bigger ones)

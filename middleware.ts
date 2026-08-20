@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 // Lightweight check: presence of the session cookie only. Full
 // verification (adminAuth.verifySessionCookie) happens in server
 // components/actions, since Edge middleware can't use firebase-admin.
-const PROTECTED_PREFIXES = ["/dashboard", "/project"];
+const PROTECTED_PREFIXES = ["/dashboard", "/project", "/onboarding"];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -22,5 +22,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/project/:path*"],
+  matcher: ["/dashboard/:path*", "/project/:path*", "/onboarding"],
 };

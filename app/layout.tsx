@@ -11,6 +11,10 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // The landing, auth, and onboarding screens always render on the
+  // dark aurora canvas by design — the light/dark choice from
+  // onboarding only applies inside the signed-in app shell, scoped
+  // in app/(root)/layout.tsx, so the default theme here stays dark.
   return (
     <html lang="en" className="dark">
       <body>
