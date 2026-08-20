@@ -450,3 +450,84 @@
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ---------------------------------------------------------------- */
+/* Touch feel — buttery, GPU-friendly press feedback for every      */
+/* tappable control in the nav (and reusable anywhere else).        */
+/* Only animates transform/opacity so it stays smooth on phones,    */
+/* and the 300ms mobile tap-delay is removed via touch-action.      */
+/* ---------------------------------------------------------------- */
+
+.tap {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transform: translateZ(0) scale(1);
+  transition:
+    transform 0.15s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
+  will-change: transform;
+}
+.tap:active {
+  transform: translateZ(0) scale(0.94);
+  transition-duration: 0.08s;
+}
+.tap-sm:active {
+  transform: translateZ(0) scale(0.9);
+}
+
+/* Respect reduced-motion users even for the press effect. */
+@media (prefers-reduced-motion: reduce) {
+  .tap,
+  .tap:active {
+    transform: none !important;
+  }
+}
+
+/* Buttery standard easing, reused across the nav so every motion
+   (menu open/close, underline slide, icon pop) shares one feel
+   instead of each element inventing its own curve. */
+:root {
+  --ease-butter: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ---------------------------------------------------------------- */
+/* Mobile nav sheet — slides + fades in under the header, with a    */
+/* matching backdrop. Driven by a `data-state` attribute so the     */
+/* panel stays mounted for its exit animation instead of popping    */
+/* out abruptly.                                                    */
+/* ---------------------------------------------------------------- */
+
+.mobile-nav-backdrop {
+  opacity: 0;
+  transition: opacity 0.25s var(--ease-butter);
+}
+.mobile-nav-backdrop[data-state="open"] {
+  opacity: 1;
+}
+
+.mobile-nav-sheet {
+  transform: translateY(-8px) scale(0.98);
+  opacity: 0;
+  transition:
+    transform 0.28s var(--ease-butter),
+    opacity 0.22s var(--ease-butter);
+  transform-origin: top center;
+}
+.mobile-nav-sheet[data-state="open"] {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+
+/* Hamburger -> X morph, pure transform so it's smooth at 60fps. */
+.hamburger-line {
+  transition:
+    transform 0.32s var(--ease-butter),
+    opacity 0.2s var(--ease-butter);
+}
+
+/* Safe-area padding so the mobile sheet clears notches/home indicators. */
+.pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
