@@ -6,6 +6,9 @@ import Link from "next/link";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  getAdditionalUserInfo,
 } from "firebase/auth";
 import { toast } from "sonner";
 import { Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
@@ -19,6 +22,7 @@ export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -49,6 +53,39 @@ export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
       toast.error(message.replace("Firebase: ", ""));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleGoogleSignIn() {
+    setGoogleLoading(true);
+
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const isNewUser = getAdditionalUserInfo(result)?.isNewUser ?? false;
+
+      const idToken = await result.user.getIdToken();
+      await createSessionCookie(idToken);
+
+      if (isNewUser) {
+        // First time we've seen this Google account — same onboarding
+        // flow as a fresh email sign-up.
+        router.push("/onboarding");
+      } else {
+        const redirect = searchParams.get("redirect") || "/dashboard";
+        router.push(redirect);
+      }
+      router.refresh();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Something went wrong";
+      // Don't scare the person with an error toast if they just closed
+      // the Google popup on purpose.
+      if (!message.includes("popup-closed-by-user")) {
+        toast.error(message.replace("Firebase: ", ""));
+      }
+    } finally {
+      setGoogleLoading(false);
     }
   }
 
@@ -124,6 +161,43 @@ export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
           : mode === "sign-up"
             ? "Create account"
             : "Sign in"}
+      </button>
+
+      <div className="flex items-center gap-3">
+        <span className="h-px flex-1 bg-border" />
+        <span className="text-xs uppercase tracking-wide text-muted">or</span>
+        <span className="h-px flex-1 bg-border" />
+      </div>
+
+      <button
+        type="button"
+        onClick={handleGoogleSignIn}
+        disabled={loading || googleLoading}
+        className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-border bg-background/80 py-2.5 font-medium transition-colors hover:bg-surface disabled:opacity-60"
+      >
+        {googleLoading ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+            <path
+              fill="#4285F4"
+              d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.91c1.7-1.57 2.69-3.88 2.69-6.62Z"
+            />
+            <path
+              fill="#34A853"
+              d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.91-2.26c-.81.54-1.84.86-3.05.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18Z"
+            />
+            <path
+              fill="#FBBC05"
+              d="M3.97 10.72A5.4 5.4 0 0 1 3.68 9c0-.6.1-1.18.29-1.72V4.95H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.05l3.01-2.33Z"
+            />
+            <path
+              fill="#EA4335"
+              d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58Z"
+            />
+          </svg>
+        )}
+        {googleLoading ? "Please wait..." : "Continue with Google"}
       </button>
 
       <p className="text-center text-sm text-muted">
