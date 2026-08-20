@@ -20,7 +20,9 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "sonner": "^2.0.1",
-    "zod": "^3.24.2"
+    "zod": "^3.24.2",
+    "@langchain/langgraph": "^1.4.10",
+    "@langchain/langgraph-checkpoint": "^1.1.3"
   },
   "devDependencies": {
     "@types/node": "^20",

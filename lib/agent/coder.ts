@@ -63,44 +63,66 @@ export async function runCoderForFile(
   task: ImplementationTask,
   plan: Plan,
   fs: VirtualFS,
-  onRetry?: RetryOptions["onRetry"]
+  onRetry?: RetryOptions["onRetry"],
+  currentContent?: string | null,
+  precomputedContext?: string
 ): Promise<{ content: string; usage: CallUsage }> {
   const existingFilesList = Object.keys(fs).join("\n");
-  const relevant = selectContext(fs);
+  // Prefer the dependency-aware context selected by the graph's "context"
+  // node (nodes/context.ts - target's direct deps, reverse deps, and
+  // keyword-ranked related files). Only fall back to dumping the
+  // most-recent files here if the graph didn't hand us a selection (e.g.
+  // a caller invoking the coder directly outside the graph).
+  const relevant = precomputedContext && precomputedContext.trim().length > 0
+    ? precomputedContext
+    : selectContext(fs);
   const system = coderSystemPrompt(JSON.stringify(plan));
-  const prompt = coderTaskPrompt(task, existingFilesList, relevant);
-  // Scaled to the task's own description length instead of a flat 3500 for
-  // every file. A one-line "add an h1 saying hello" task doesn't need the
-  // same reserved completion budget as a full page with several sections -
-  // and because reserveGroqBudget() below charges maxTokens against the
-  // TPM cap up front (see rateLimiter.ts), reserving 3500 on every call
-  // regardless of size was the main reason small pages queued behind a
-  // budget they never actually needed. The Architect writes longer, more
-  // detailed task descriptions for genuinely bigger files, so description
-  // length is a reasonable proxy for expected output size; the 3500
-  // ceiling is unchanged, so nothing gets truncated on real multi-section
-  // pages.
-  const maxTokens = clampTokenBudget(task.task_description.length * 3, 700, 3500);
-
-  // Wait (if needed) for real headroom in Groq's per-minute budget before
-  // firing - see rateLimiter.ts. Replaces the old flat inter-file sleep:
-  // zero wait when there's headroom, and never a call that was always
-  // going to 429.
-  const settle = await reserveGroqBudget(estimateTokens(system, prompt) + maxTokens);
-
-  const { text, usage } = await withGroqRetry(
-    () =>
-      generateText({
-        model: groq(MODEL_ID),
-        system,
-        prompt,
-        // Capped so (input context + this) stays under Groq's TPM cap -
-        // see maxTokens sizing above and CONTEXT_CHAR_BUDGET.
-        maxTokens,
-      }),
-    { onRetry }
+  const prompt = coderTaskPrompt(task, existingFilesList, relevant, currentContent);
+  // Do not derive the completion budget from task-description length alone.
+  // A short task description can still require a large complete file. This
+  // was the source of silent truncation (finishReason === "length").
+  const ext = task.filepath.split(".").pop()?.toLowerCase();
+  const baseline =
+    ext === "js" || ext === "mjs" ? 2200 :
+    ext === "css" ? 2200 :
+    ext === "html" || ext === "htm" ? 1800 :
+    2400;
+  const existingDemand = currentContent ? Math.ceil(currentContent.length / 3.5) + 500 : 0;
+  const descriptionDemand = Math.ceil(task.task_description.length * 2.5);
+  let maxTokens = clampTokenBudget(
+    Math.max(baseline, existingDemand, descriptionDemand),
+    1200,
+    3200
   );
-  settle(usage.totalTokens ?? maxTokens);
 
-  return { content: stripFences(text), usage };
+  // A length finish is an explicit truncation signal. Retry once with a
+  // larger completion budget rather than allowing syntactically-valid
+  // garbage such as `document.getElement` to reach the preview.
+  let lastResult: { text: string; usage: CallUsage; finishReason?: string } | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const settle = await reserveGroqBudget(estimateTokens(system, prompt) + maxTokens);
+    const result = await withGroqRetry(
+      () =>
+        generateText({
+          model: groq(MODEL_ID),
+          system,
+          prompt:
+            attempt === 0
+              ? prompt
+              : `${prompt}\n\nCRITICAL: Your previous response was truncated before the file was complete. Return the COMPLETE file from the first character to the last character. Do not stop early. Do not use placeholders or omit code.`,
+          maxTokens,
+        }),
+      { onRetry }
+    );
+    settle(result.usage.totalTokens ?? maxTokens);
+    lastResult = result;
+    if (result.finishReason !== "length") break;
+    maxTokens = Math.min(3800, Math.max(maxTokens + 800, Math.ceil(maxTokens * 1.35)));
+  }
+
+  if (!lastResult) throw new Error("Coder returned no result.");
+  return {
+    content: stripFences(lastResult.text),
+    usage: { ...lastResult.usage, finishReason: lastResult.finishReason },
+  };
 }

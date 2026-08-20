@@ -26,7 +26,7 @@ function stripFences(content: string): string {
 }
 
 /** Decides which files need to change to satisfy the requested edit. */
-async function planEdit(
+export async function planEdit(
   instruction: string,
   files: VirtualFS,
   onRetry?: RetryOptions["onRetry"]
@@ -100,7 +100,7 @@ export type EditEvent =
 const MAX_QA_REPAIR_ATTEMPTS = 1;
 
 /** One coder call for an edit task - extracted so the QA wrapper below can call it again for repairs. */
-async function editFileOnce(
+export async function editFileOnce(
   task: ImplementationTask,
   plan: Plan,
   currentContent: string | null,
@@ -109,26 +109,49 @@ async function editFileOnce(
 ): Promise<{ content: string; usage: CallUsage }> {
   const system = editCoderSystemPrompt(JSON.stringify(plan));
   const prompt = editCoderTaskPrompt(task, currentContent, context);
-  // Scaled to the task's own description length, same reasoning as
-  // coder.ts - a small tweak ("change the heading text") doesn't need
-  // the same reserved completion budget as a large rewrite.
-  const maxTokens = clampTokenBudget(task.task_description.length * 3, 700, 3000);
-  const settle = await reserveGroqBudget(estimateTokens(system, prompt) + maxTokens);
-
-  const { text, usage } = await withGroqRetry(
-    () =>
-      generateText({
-        model: groq(MODEL_ID),
-        system,
-        prompt,
-        // Capped so (input context + this) stays under Groq's 8000 TPM
-        // cap - see CONTEXT_CHAR_BUDGET / CURRENT_FILE_CHAR_BUDGET above.
-        maxTokens,
-      }),
-    { onRetry }
+  // Never size the completion budget from task-description length alone.
+  // Short descriptions can still produce large files. Prefer a file-type
+  // baseline and the size of the existing file, with a bounded retry if the
+  // provider explicitly reports finishReason === "length".
+  const ext = task.filepath.split(".").pop()?.toLowerCase();
+  const baseline =
+    ext === "js" || ext === "mjs" ? 2200 :
+    ext === "css" ? 2200 :
+    ext === "html" || ext === "htm" ? 1800 :
+    2400;
+  let maxTokens = clampTokenBudget(
+    Math.max(baseline, currentContent ? Math.ceil(currentContent.length / 3.5) + 500 : 0),
+    1200,
+    3200
   );
-  settle(usage.totalTokens ?? maxTokens);
-  return { content: stripFences(text), usage };
+
+  let lastResult: { text: string; usage: CallUsage; finishReason?: string } | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const settle = await reserveGroqBudget(estimateTokens(system, prompt) + maxTokens);
+    const result = await withGroqRetry(
+      () =>
+        generateText({
+          model: groq(MODEL_ID),
+          system,
+          prompt:
+            attempt === 0
+              ? prompt
+              : `${prompt}\n\nCRITICAL: The previous response was truncated. Return the COMPLETE file, preserving all existing behavior and finishing every statement/function.`,
+          maxTokens,
+        }),
+      { onRetry }
+    );
+    settle(result.usage.totalTokens ?? maxTokens);
+    lastResult = result;
+    if (result.finishReason !== "length") break;
+    maxTokens = Math.min(3800, Math.max(maxTokens + 800, Math.ceil(maxTokens * 1.35)));
+  }
+
+  if (!lastResult) throw new Error("Edit coder returned no result.");
+  return {
+    content: stripFences(lastResult.text),
+    usage: { ...lastResult.usage, finishReason: lastResult.finishReason },
+  };
 }
 
 /**

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/actions/auth";
 import { checkEditLimit } from "@/lib/actions/rate-limit";
-import { editProject } from "@/lib/agent/edit";
+import { runEditGraph } from "@/lib/agent/graph/editGraph";
 import type { Plan, VirtualFS } from "@/lib/agent/types";
 import { isProviderConfigured, requiredEnvVarName } from "@/lib/agent/groq";
 
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
       const emit = (event: object) => {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
       };
-      await editProject(instruction, files, plan, emit);
+      await runEditGraph(instruction, files, plan, emit);
       controller.close();
     },
   });

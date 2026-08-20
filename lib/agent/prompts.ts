@@ -69,6 +69,7 @@ ${plan}
 
 Rules:
 - Output the FULL content of the requested file only - no explanations, no markdown code fences, no commentary.
+- NEVER intentionally shorten, summarize, or omit code to fit a token budget. Finish every statement, function, event handler, and closing tag before stopping. The server checks the provider finish reason and will retry if the response is cut off.
 - The file must integrate correctly with the other files described in the plan (matching import paths, element ids/classes, function names, etc.).
 - CRITICAL: if you are writing a CSS or JS file and an HTML file already exists in the "Relevant existing file contents" context below, every selector/class/id you write MUST be copied verbatim from that actual HTML - never invent, rename, pluralize, or guess a class name that "should" exist. A CSS rule that doesn't exactly match a class in the HTML silently does nothing, which is a critical bug. If you are writing the HTML file itself, choose clear semantic class names and use them consistently, since later files will copy them exactly.
 - If you are writing the HTML file, do NOT inline any CSS in a <style> tag or any JS in a <script> tag - link to the separate .css/.js files listed in the plan via <link rel="stylesheet"> and <script src>.
@@ -106,6 +107,7 @@ ${plan}
 Rules:
 - You will be given the CURRENT full content of the file (if it already exists) plus the requested change.
 - Apply ONLY the requested change - preserve everything else in the file exactly as-is unless the change requires touching it.
+- NEVER intentionally shorten or truncate the file. Return the complete file from the first character through its final closing statement/tag.
 - Output the FULL new content of the file - no explanations, no markdown code fences, no commentary, no diff syntax.
 - The file must still integrate correctly with the rest of the project (matching import paths, element ids/classes, function names, etc.).
 - Do not wrap the output in \`\`\` fences. Return raw file content exactly as it should be saved to disk.
@@ -137,10 +139,14 @@ Return ONLY the complete raw new content for ${task.filepath}.`;
 export function coderTaskPrompt(
   task: { filepath: string; task_description: string },
   existingFilesList: string,
-  relevantFileContents: string
+  relevantFileContents: string,
+  currentContent?: string | null
 ): string {
   return `Task: ${task.task_description}
 File to write: ${task.filepath}
+
+Current content of this file ${currentContent ? "(repair/modify this existing file)" : "(new file)"}:
+${currentContent ?? "(none)"}
 
 Other files already created in this project:
 ${existingFilesList || "(none yet)"}

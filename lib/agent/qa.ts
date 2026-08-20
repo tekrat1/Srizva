@@ -125,6 +125,22 @@ function checkJs(content: string): QAIssue[] {
     }
     issues.push({ message: `JavaScript syntax error: ${message}` });
   }
+
+  // Syntax-only parsing cannot detect semantic truncation. A response such
+  // as `const historyList = document.getElement` is valid JavaScript but is
+  // clearly an incomplete DOM lookup. Catch common abrupt endings and
+  // unfinished DOM APIs before code reaches the preview.
+  const trimmed = content.trim();
+  if (/[.?:=,+\-*/%&|]\s*$/.test(trimmed) || /\b(?:getElementById|getElementsByClassName|getElementsByTagName|querySelector|querySelectorAll|addEventListener|setTimeout|setInterval)\s*$/.test(trimmed)) {
+    issues.push({ message: "JavaScript appears truncated or ends with an incomplete expression." });
+  }
+
+  // A file ending in a declaration prefix is another strong truncation
+  // signal even when the parser accepts the preceding text.
+  if (/\b(?:const|let|var|function|class|if|for|while|switch|return)\s+[A-Za-z_$][\w$]*\s*$/.test(trimmed)) {
+    issues.push({ message: "JavaScript appears to end in an incomplete declaration." });
+  }
+
   return issues;
 }
 

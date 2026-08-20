@@ -43,6 +43,8 @@ export interface CallUsage {
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
+  /** Model generation termination reason (e.g. "stop" or "length"). */
+  finishReason?: string;
 }
 
 export interface UsageTotals {
