@@ -1,6 +1,9 @@
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import PricingCallout from "@/components/PricingCallout";
+import FAQ from "@/components/FAQ";
+import WaitlistCapture from "@/components/WaitlistCapture";
 import AuthAura from "@/components/auth/AuthAura";
 import { getCurrentUser } from "@/lib/actions/auth";
 
@@ -73,6 +76,10 @@ export default async function LandingPage() {
             ))}
           </div>
         </main>
+
+        <PricingCallout />
+        <FAQ />
+        <WaitlistCapture />
 
         <Footer />
       </div>

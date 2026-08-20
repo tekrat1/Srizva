@@ -9,11 +9,13 @@ import {
   signInWithPopup,
   GoogleAuthProvider,
   getAdditionalUserInfo,
+  sendEmailVerification,
 } from "firebase/auth";
 import { toast } from "sonner";
 import { Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
 import { auth } from "@/lib/firebase/client";
 import { createSessionCookie } from "@/lib/actions/auth";
+import PasswordStrengthMeter from "@/components/auth/PasswordStrengthMeter";
 
 export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   const router = useRouter();
@@ -25,9 +27,16 @@ export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   const [googleLoading, setGoogleLoading] = useState(false);
   // Only relevant in sign-up mode — existing users already agreed once.
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  // Honeypot: a field real users never see or fill in (visually hidden +
+  // tabIndex -1 + autoComplete off), but naive bots that auto-fill every
+  // input will populate it. If it's non-empty on submit, silently no-op
+  // instead of telling the bot it was caught.
+  const [honeypot, setHoneypot] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    if (honeypot) return; // bot — bail out quietly
 
     if (mode === "sign-up" && !agreedToTerms) {
       toast.error(
@@ -48,6 +57,8 @@ export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
       await createSessionCookie(idToken);
 
       if (mode === "sign-up") {
+        // Fire-and-forget — don't block onboarding on the email round trip.
+        sendEmailVerification(credential.user).catch(() => {});
         // Brand-new account — walk them through the step-by-step
         // onboarding (style, name, role, company size) before they
         // land on the dashboard.
@@ -67,6 +78,8 @@ export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   }
 
   async function handleGoogleSignIn() {
+    if (honeypot) return; // bot — bail out quietly
+
     if (mode === "sign-up" && !agreedToTerms) {
       toast.error(
         "Please confirm you're 18+ and agree to the Terms and Privacy Policy."
@@ -108,6 +121,22 @@ export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      {/* Honeypot — hidden from real users, catches basic form-filling bots.
+          aria-hidden + tabIndex=-1 + off-screen so screen readers and
+          keyboard users never encounter it. */}
+      <div aria-hidden="true" className="absolute left-[-9999px]" style={{ opacity: 0 }}>
+        <label htmlFor="company-website">Company website</label>
+        <input
+          id="company-website"
+          name="company-website"
+          type="text"
+          tabIndex={-1}
+          autoComplete="off"
+          value={honeypot}
+          onChange={(e) => setHoneypot(e.target.value)}
+        />
+      </div>
+
       <div>
         <h1 className="text-xl font-semibold">
           {mode === "sign-up" ? "Create your account" : "Welcome back"}
@@ -165,6 +194,17 @@ export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
             )}
           </button>
         </div>
+        {mode === "sign-up" && <PasswordStrengthMeter password={password} />}
+        {mode === "sign-in" && (
+          <div className="mt-1.5 text-right">
+            <Link
+              href="/forgot-password"
+              className="text-xs text-muted hover:text-foreground"
+            >
+              Forgot password?
+            </Link>
+          </div>
+        )}
       </div>
 
       {mode === "sign-up" && (

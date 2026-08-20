@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ShieldCheck, Lock } from "lucide-react";
 import BrandMark from "./auth/BrandMark";
 
 const SUPPORT_EMAIL = "tekrat10@gmail.com";
@@ -7,7 +8,7 @@ export default function Footer() {
   return (
     <footer className="relative z-10 border-t border-white/10 bg-void/60 backdrop-blur-sm">
       <div className="mx-auto max-w-6xl px-6 py-14">
-        <div className="grid gap-10 sm:grid-cols-[1.3fr_1fr_1fr]">
+        <div className="grid gap-10 sm:grid-cols-[1.3fr_1fr_1fr_1fr]">
           <div>
             <Link
               href="/"
@@ -20,6 +21,27 @@ export default function Footer() {
               Describe what you want to build. An AI agent plans, codes, and
               previews your app - right in your browser.
             </p>
+            <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted">
+              <span className="flex items-center gap-1.5">
+                <Lock className="h-3 w-3" />
+                Encrypted in transit
+              </span>
+              <span className="flex items-center gap-1.5">
+                <ShieldCheck className="h-3 w-3" />
+                Your data isn&apos;t sold
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Product</h3>
+            <ul className="mt-3 space-y-2 text-sm">
+              <li>
+                <Link href="/status" className="text-muted hover:text-foreground">
+                  Status &amp; Changelog
+                </Link>
+              </li>
+            </ul>
           </div>
 
           <div>

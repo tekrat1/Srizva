@@ -39,6 +39,12 @@ export async function getCurrentUser() {
       uid: decoded.uid,
       email: decoded.email ?? null,
       name: (decoded.name as string | undefined) ?? null,
+      emailVerified: decoded.email_verified ?? false,
+      // "password" = email/password signup, "google.com" = Google sign-in.
+      // Google accounts are already verified by Google, so we only ever
+      // nag password accounts to verify their email.
+      signInProvider:
+        (decoded.firebase?.sign_in_provider as string | undefined) ?? null,
     };
   } catch {
     // No session, invalid session, or Firebase not configured yet -

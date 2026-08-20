@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Toaster } from "sonner";
+import CookieConsentBanner from "@/components/CookieConsentBanner";
 
 export const metadata: Metadata = {
   title: "Srizva - Imagine It. Srizva Builds It.",
@@ -35,6 +36,7 @@ export default function RootLayout({
       <body>
         {children}
         <Toaster theme="dark" position="top-center" />
+        <CookieConsentBanner />
       </body>
     </html>
   );
