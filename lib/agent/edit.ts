@@ -17,7 +17,7 @@ import {
 } from "./prompts";
 import { withGroqRetry, type RetryOptions } from "./retry";
 import { qaCheckFile } from "./qa";
-import { reserveGroqBudget, estimateTokens } from "./rateLimiter";
+import { reserveGroqBudget, estimateTokens, clampTokenBudget } from "./rateLimiter";
 
 function stripFences(content: string): string {
   const trimmed = content.trim();
@@ -33,7 +33,11 @@ async function planEdit(
 ) {
   const currentFilesList = Object.keys(files).join("\n");
   const prompt = editPlannerPrompt(instruction, currentFilesList);
-  const maxTokens = 3000;
+  // Scaled to how many files exist to edit against, same reasoning as
+  // architect.ts - a 1-2 file project's edit plan doesn't need the same
+  // reserved budget as a 10-file one, and the flat number was reserved
+  // against Groq's TPM cap before the call even ran.
+  const maxTokens = clampTokenBudget(500 + Object.keys(files).length * 220, 800, 3000);
   const settle = await reserveGroqBudget(estimateTokens(prompt) + maxTokens);
 
   const { object, usage } = await withGroqRetry(
@@ -105,7 +109,10 @@ async function editFileOnce(
 ): Promise<{ content: string; usage: CallUsage }> {
   const system = editCoderSystemPrompt(JSON.stringify(plan));
   const prompt = editCoderTaskPrompt(task, currentContent, context);
-  const maxTokens = 3000;
+  // Scaled to the task's own description length, same reasoning as
+  // coder.ts - a small tweak ("change the heading text") doesn't need
+  // the same reserved completion budget as a large rewrite.
+  const maxTokens = clampTokenBudget(task.task_description.length * 3, 700, 3000);
   const settle = await reserveGroqBudget(estimateTokens(system, prompt) + maxTokens);
 
   const { text, usage } = await withGroqRetry(

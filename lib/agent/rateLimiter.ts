@@ -20,8 +20,20 @@
  * assuming everyone is on the free tier forever - see .env.local.example.
  */
 
-const TPM_LIMIT = Number(process.env.GROQ_TPM_LIMIT ?? 8000);
-const RPM_LIMIT = Number(process.env.GROQ_RPM_LIMIT ?? 30);
+// .env.local.example ships these keys BLANK (e.g. "GROQ_TPM_LIMIT="). If that
+// line is left as-is, process.env.GROQ_TPM_LIMIT is "" - not undefined - so
+// the "?? 8000" fallback never kicks in and Number("") silently evaluates to
+// 0. A 0 budget means every single call looks "over budget" forever, so
+// reserveGroqBudget() spins in its wait loop indefinitely. Guard explicitly
+// against "", so a blank/unset env var always falls back to the tier default.
+function envNumber(value: string | undefined, fallback: number): number {
+  if (!value || value.trim() === "") return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const TPM_LIMIT = envNumber(process.env.GROQ_TPM_LIMIT, 70000);
+const RPM_LIMIT = envNumber(process.env.GROQ_RPM_LIMIT, 30);
 const WINDOW_MS = 60_000;
 
 interface LogEntry {
@@ -85,4 +97,20 @@ export async function reserveGroqBudget(
 /** ~4 chars/token is the same conservative estimate already used elsewhere (coder.ts, edit.ts). */
 export function estimateTokens(...texts: (string | undefined | null)[]): number {
   return Math.ceil(texts.reduce((sum, t) => sum + (t?.length ?? 0), 0) / 4);
+}
+
+/**
+ * Clamps a token estimate between a floor and a ceiling.
+ *
+ * reserveGroqBudget() above charges a call's `maxTokens` against the TPM
+ * cap up front, before the real completion length is known - so a flat
+ * worst-case `maxTokens` on every call (regardless of how small the
+ * actual task is) reserves way more budget than it needs, and that
+ * over-reservation is what forces later calls to sit out a big chunk of
+ * the 60s window even on a trivially small project. Call sites use this
+ * to size `maxTokens` to the task at hand instead: small tasks reserve a
+ * small slot (and finish fast), big tasks still get the full ceiling.
+ */
+export function clampTokenBudget(estimate: number, floor: number, ceiling: number): number {
+  return Math.max(floor, Math.min(ceiling, Math.round(estimate)));
 }

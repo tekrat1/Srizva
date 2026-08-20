@@ -3,7 +3,7 @@ import { groq, MODEL_ID } from "./groq";
 import type { ImplementationTask, Plan, VirtualFS, CallUsage } from "./types";
 import { coderSystemPrompt, coderTaskPrompt } from "./prompts";
 import { withGroqRetry, type RetryOptions } from "./retry";
-import { reserveGroqBudget, estimateTokens } from "./rateLimiter";
+import { reserveGroqBudget, estimateTokens, clampTokenBudget } from "./rateLimiter";
 
 // Strips accidental ```lang fences if the model adds them despite instructions.
 function stripFences(content: string): string {
@@ -69,7 +69,18 @@ export async function runCoderForFile(
   const relevant = selectContext(fs);
   const system = coderSystemPrompt(JSON.stringify(plan));
   const prompt = coderTaskPrompt(task, existingFilesList, relevant);
-  const maxTokens = 3500;
+  // Scaled to the task's own description length instead of a flat 3500 for
+  // every file. A one-line "add an h1 saying hello" task doesn't need the
+  // same reserved completion budget as a full page with several sections -
+  // and because reserveGroqBudget() below charges maxTokens against the
+  // TPM cap up front (see rateLimiter.ts), reserving 3500 on every call
+  // regardless of size was the main reason small pages queued behind a
+  // budget they never actually needed. The Architect writes longer, more
+  // detailed task descriptions for genuinely bigger files, so description
+  // length is a reasonable proxy for expected output size; the 3500
+  // ceiling is unchanged, so nothing gets truncated on real multi-section
+  // pages.
+  const maxTokens = clampTokenBudget(task.task_description.length * 3, 700, 3500);
 
   // Wait (if needed) for real headroom in Groq's per-minute budget before
   // firing - see rateLimiter.ts. Replaces the old flat inter-file sleep:
@@ -83,9 +94,8 @@ export async function runCoderForFile(
         model: groq(MODEL_ID),
         system,
         prompt,
-        // Capped so (input context + this) stays under Groq's 8000 TPM cap -
-        // see CONTEXT_CHAR_BUDGET above. 3500 tokens is enough for a full
-        // HTML/CSS/JS file for the small/medium sites this pipeline targets.
+        // Capped so (input context + this) stays under Groq's TPM cap -
+        // see maxTokens sizing above and CONTEXT_CHAR_BUDGET.
         maxTokens,
       }),
     { onRetry }

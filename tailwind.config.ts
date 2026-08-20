@@ -30,9 +30,21 @@ const config: Config = {
           amber: "#fbbf24",
         },
         void: "#050609",
+        // Glitch Drop accent palette — hyperpop / CRT glitch direction
+        // used on hero sections (landing + dashboard). Kept separate
+        // from `aurora` so it never collides with the existing brand
+        // gradient still used elsewhere.
+        glitch: {
+          ink: "#0A0A0D",
+          magenta: "#FF2E9A",
+          cyan: "#00F0FF",
+          yellow: "#E8FF3C",
+        },
       },
       fontFamily: {
         display: ["var(--font-display)", "system-ui", "sans-serif"],
+        "glitch-display": ["var(--font-glitch-display)", "sans-serif"],
+        "glitch-mono": ["var(--font-glitch-mono)", "monospace"],
       },
       keyframes: {
         "orbit-spin": {

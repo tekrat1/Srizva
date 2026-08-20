@@ -2,7 +2,7 @@ import { runPlanner } from "./planner";
 import { runArchitect } from "./architect";
 import { runCoderForFile } from "./coder";
 import { qaCheckFile } from "./qa";
-import { addUsage, emptyUsage, type GenerationEvent, type ImplementationTask, type Plan, type UsageTotals, type VirtualFS } from "./types";
+import { addUsage, emptyUsage, type GenerationEvent, type ImplementationTask, type Plan, type TaskPlan, type UsageTotals, type VirtualFS } from "./types";
 import type { RetryOptions } from "./retry";
 import { MODEL_ID } from "./groq";
 
@@ -93,8 +93,32 @@ export async function generateProject(
     emit({ type: "plan", plan });
 
     emit({ type: "status", message: "Breaking the plan into build tasks..." });
-    const { taskPlan, usage: architectUsage } = await runArchitect(plan, onRetry);
-    addUsage(usageTotals, architectUsage);
+    let taskPlan: TaskPlan;
+    if (plan.files.length <= 1) {
+      // Skip the Architect round trip entirely for single-file plans (the
+      // common case for a small page - "just a heading", a one-section
+      // landing page, etc.). The Architect's job is to sequence
+      // dependencies between multiple files and write cross-file
+      // integration notes; with only one file there's nothing to
+      // sequence, so the call is pure overhead - one extra LLM round
+      // trip AND a ~3000-token reservation against the TPM budget (see
+      // rateLimiter.ts) that then makes the very next call queue and
+      // wait. This is the single biggest win for "small page taking
+      // way longer than it should."
+      const file = plan.files[0] ?? { path: "index.html", purpose: plan.description };
+      taskPlan = {
+        implementation_steps: [
+          {
+            filepath: file.path,
+            task_description: `Build ${file.path} for this project: ${plan.description}. Purpose of this file: ${file.purpose}. Features: ${plan.features.join(", ")}.`,
+          },
+        ],
+      };
+    } else {
+      const { taskPlan: generatedTaskPlan, usage: architectUsage } = await runArchitect(plan, onRetry);
+      addUsage(usageTotals, architectUsage);
+      taskPlan = generatedTaskPlan;
+    }
     emit({ type: "task_plan", taskPlan });
 
     const fs: VirtualFS = {};

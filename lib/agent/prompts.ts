@@ -7,22 +7,21 @@
 // injected into planner, coder, and edit prompts so this applies to fresh
 // generations AND edits of existing projects.
 
+// Trimmed to the essentials only - these get resent in full on every
+// single Groq call (planner + once per coder file), so their length is
+// pure token overhead charged against the TPM budget on EVERY request,
+// not a one-time cost. A verbose version here is the difference between a
+// 3-file build fitting in the free 8000 TPM window or not.
 const IMAGE_RULES = `IMAGES - hard constraint:
-- This pipeline can only write .html/.css/.js files. It CANNOT generate, download, or save actual image files. NEVER reference a local image path like "images/x.jpg", "assets/logo.svg", "img/hero.png", etc. - that file will never exist and the image will be broken.
-- For every photograph, use a real, always-loading hotlinked URL from Picsum Photos in this exact seeded format: https://picsum.photos/seed/SEED/WIDTH/HEIGHT (e.g. https://picsum.photos/seed/gym-hero/1600/1000, https://picsum.photos/seed/yoga-studio-1/800/600). Make SEED a short descriptive slug related to what the image should show, and use a DIFFERENT seed for every distinct image on the page (reusing a seed repeats the same photo). Vary width/height to fit the layout (e.g. 1600x1000 for a hero, 500x600 for a portrait, 600x600 for a square grid item).
-- Picsum photos are random stock photography, not literally matched to the keyword (there is no keyword search) - the SEED only controls which fixed photo you get, so don't imply the image content is guaranteed to match; pick seeds that read as plausible filenames for the subject.
-- Every <img> tag referencing a hotlinked photo MUST also include an inline fallback in case the request fails, e.g.: <img src="https://picsum.photos/seed/gym-hero/1600/1000" alt="..." loading="lazy" onerror="this.onerror=null;this.src='https://placehold.co/1600x1000/e8e3d9/333333?text=Gym';">. Use placehold.co with a background/text color that matches the page's palette and short alt-derived text.
-- For a logo, do NOT reference an image file at all - use a text wordmark (styled with CSS/webfont) or a small inline <svg>...</svg> written directly in the HTML.
-- For icons, use inline SVG or a unicode/CSS approach - never reference a missing icon file.
-- Every <img> must have a real, descriptive alt attribute and loading="lazy" (except above-the-fold hero images).`;
+- Cannot create image files. NEVER reference local paths like "images/x.jpg".
+- Photos: https://picsum.photos/seed/SEED/WIDTH/HEIGHT (unique seed per image) with onerror fallback to placehold.co, matching alt text and loading="lazy".
+- Logos/icons: inline SVG or text wordmark, never an image file.`;
 
-const DESIGN_RULES = `DESIGN QUALITY - hard constraint, this must NOT look like a generic template:
-- Never default to black+red+yellow or navy+gold "fitness template" palettes, and never rely only on system fonts (Helvetica/Arial/sans-serif). These read as cheap and generic.
-- Import two complementary Google Fonts via <link> tags in the <head> (e.g. fonts.googleapis.com) - one distinctive display/serif face for headings, one clean sans-serif for body text. Choose faces that fit the specific brand vibe described in the plan, not a default pairing every time.
-- Choose a deliberate, on-brand color palette defined as CSS custom properties in :root - grounded neutrals (charcoal, stone, cream) plus ONE confident accent color that fits the brand's positioning. Avoid primary-color defaults.
-- Use a real spacing/type scale (CSS custom properties), generous whitespace, and consistent border-radius/shadow language rather than ad-hoc values.
-- Add tasteful hover/scroll motion (transform, opacity, transition) on interactive elements - buttons, cards, nav - so the site feels premium rather than static. Keep it subtle, not gimmicky.
-- Sticky nav should feel refined (e.g. subtle blur/shadow on scroll), not just a plain white bar.`;
+const DESIGN_RULES = `DESIGN QUALITY - hard constraint, avoid generic template look:
+- No black+red+yellow or navy+gold defaults, no system-font-only text.
+- Two paired Google Fonts (display + body) fitting the brand, via <link> in <head>.
+- Deliberate palette as CSS custom properties in :root: neutrals + one accent.
+- Real spacing/radius/shadow scale as CSS vars, generous whitespace, subtle hover/scroll motion on buttons/cards/nav, refined sticky nav (blur/shadow on scroll).`;
 
 export function plannerPrompt(userPrompt: string): string {
   return `You are the PLANNER agent. Convert the user prompt into a COMPLETE engineering project plan.

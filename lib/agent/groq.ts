@@ -9,5 +9,12 @@ export const groq = createGroq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
-// Same model coder-buddy used. Swap here if you want a different Groq model.
-export const MODEL_ID = "openai/gpt-oss-120b";
+// Was openai/gpt-oss-120b (8K TPM, 200K TPD on the free tier - see
+// console.groq.com/settings/limits). Switched to compound-mini: same free
+// account, but 70K TPM (~9x) and no daily token cap at all, per the org's
+// Current Limits page. Compound models run on Groq's own agentic stack
+// (tool-use built in) but work fine as a plain chat-completions swap for
+// generateText/generateObject - no code changes needed elsewhere.
+// If output quality/behavior differs from gpt-oss-120b, swap back or try
+// "groq/compound" (same limits, slightly heavier model).
+export const MODEL_ID = "groq/compound-mini";

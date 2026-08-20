@@ -9,8 +9,12 @@ import type { VirtualFS } from "@/lib/agent/types";
  *
  * Inlines every CSS/JS file referenced by index.html directly into the HTML
  * as <style>/<script> tags, then renders the whole thing in a sandboxed
- * iframe via `srcDoc`. No install step, no server, no external service -
- * runs entirely client-side and costs nothing to build or deploy.
+ * iframe by pointing it at a blob: URL (not `srcDoc` — a srcdoc document
+ * has no URL of its own, so relative links inside it would resolve
+ * against *this app's* real address and navigate the iframe to a live
+ * Srizva route instead of staying on the mockup). No install step, no
+ * server, no external service - runs entirely client-side and costs
+ * nothing to build or deploy.
  *
  * Only supports plain HTML/CSS/JS projects (no npm packages / bundler).
  * The planner prompt is configured to only ever produce this kind of
@@ -51,6 +55,32 @@ function buildPreviewHtml(files: VirtualFS): string | null {
       return js ? `<script>\n${js}\n</script>` : match;
     }
   );
+
+  // The generated project is a single static index.html with no real
+  // routes behind it. Any <a href="/">, href="/sign-up", etc. inside it
+  // has nowhere real to go — left alone, clicking it would resolve
+  // against whatever page is hosting the preview and navigate the
+  // iframe there instead of staying on the mockup. Intercept clicks on
+  // those internal links so the preview never tries to leave itself;
+  // in-page "#hash" links and real external/mailto/tel links still work.
+  const navGuard = `
+<script>
+(function () {
+  document.addEventListener("click", function (e) {
+    var a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
+    if (!a) return;
+    var href = a.getAttribute("href") || "";
+    var isExternal = /^([a-z][a-z0-9+.-]*:)?\\/\\//i.test(href) || /^(mailto:|tel:)/i.test(href);
+    var isSamePageHash = href.charAt(0) === "#";
+    if (isExternal || isSamePageHash || href === "") return;
+    e.preventDefault();
+  }, true);
+})();
+</script>`;
+
+  html = /<\/body>/i.test(html)
+    ? html.replace(/<\/body>/i, `${navGuard}\n</body>`)
+    : html + navGuard;
 
   return html;
 }
@@ -146,7 +176,7 @@ export default function LivePreview({ files }: { files: VirtualFS }) {
           }}
         >
           <iframe
-            srcDoc={html}
+            src={blobUrl ?? undefined}
             className={`h-full w-full bg-white ${
               device !== "desktop" ? "border-x border-border shadow-[0_0_0_1px_rgba(255,255,255,0.05)]" : ""
             }`}

@@ -1,4 +1,3 @@
-import { Sparkles } from "lucide-react";
 import GenerationWorkbench from "@/components/GenerationWorkbench";
 import ProjectCard from "@/components/ProjectCard";
 import { listMyProjects } from "@/lib/actions/projects";
@@ -14,24 +13,26 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-12">
       <div className="relative -mx-6 -mt-4 overflow-hidden rounded-2xl px-6 pb-8 pt-10">
+        {/* Background animation — untouched, same glow-wash as before */}
         <div aria-hidden className="glow-wash pointer-events-none absolute inset-0" />
+        {/* Glitch Drop overlay: CRT scanlines above the glow, below the content */}
+        <div aria-hidden className="glitch-drop-scanlines" />
         <div className="relative animate-fade-up">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface/80 px-3 py-1 text-[11px] font-medium tracking-wide text-muted backdrop-blur-sm">
-            <Sparkles className="h-3 w-3 text-aurora-violet" />
+          <span className="glitch-drop-pill">
+            <i />
             build mode
           </span>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-            What should we build
+          <h1 className="glitch-drop-h1 mt-3 text-3xl sm:text-4xl">
+            <span className="g-line" data-text="What should we build">
+              What should we build
+            </span>
             {firstName ? (
-              <>
-                , <span className="text-gradient-aurora">{firstName}</span>
-              </>
+              <span className="g-line accent">, {firstName}?</span>
             ) : (
-              ""
+              <span className="g-line accent">?</span>
             )}
-            ?
           </h1>
-          <p className="mt-2 max-w-md text-sm text-muted">
+          <p className="glitch-drop-body mt-2 max-w-md text-sm">
             Describe it in a sentence. You&apos;ll see it get planned, coded, and previewed live.
           </p>
         </div>

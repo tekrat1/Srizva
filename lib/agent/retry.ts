@@ -16,13 +16,33 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Extracts the wait time Groq suggests, e.g. "try again in 16.0575s" -> 16057ms. */
+/**
+ * Extracts the wait time Groq suggests. Groq formats this differently
+ * depending on the limit that tripped:
+ *  - per-minute (TPM/RPM): "try again in 16.0575s"
+ *  - per-day (TPD/RPD), which is usually a much longer wait: "try again in
+ *    14m14.927999999s", or even "1h2m3s" for very depleted daily quotas.
+ * The old version only matched the plain-seconds form, so any multi-minute
+ * wait (i.e. almost every TPD error) silently failed to parse and fell
+ * back to a useless multi-second retry - which just burns more of an
+ * already-exhausted daily quota for no benefit and gets nothing but
+ * repeat 429s until maxRetries gives up.
+ */
 function parseRetryAfterMs(message: string): number | null {
-  const match = message.match(/try again in ([\d.]+)s/i);
+  const match = message.match(/try again in ((?:[\d.]+h)?(?:[\d.]+m)?[\d.]+s)/i);
   if (!match) return null;
-  const seconds = parseFloat(match[1]);
-  if (Number.isNaN(seconds)) return null;
-  return Math.ceil(seconds * 1000);
+  const span = match[1];
+  const hours = parseFloat(span.match(/([\d.]+)h/)?.[1] ?? "0");
+  const minutes = parseFloat(span.match(/([\d.]+)m/)?.[1] ?? "0");
+  const seconds = parseFloat(span.match(/([\d.]+)s/)?.[1] ?? "0");
+  const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+  if (Number.isNaN(totalSeconds) || totalSeconds <= 0) return null;
+  return Math.ceil(totalSeconds * 1000);
+}
+
+/** True for Groq's daily (TPD/RPD) caps specifically, as opposed to per-minute (TPM/RPM). */
+function isDailyLimitError(message: string): boolean {
+  return /tokens per day|requests per day|\bTPD\b|\bRPD\b/i.test(message);
 }
 
 function isRateLimitError(err: unknown): boolean {
@@ -64,6 +84,20 @@ export async function withGroqRetry<T>(
       // Add a small buffer on top of Groq's suggested wait so we don't
       // race the window boundary.
       const waitMs = (parseRetryAfterMs(message) ?? fallbackDelayMs) + 500;
+
+      // A daily (TPD/RPD) cap means retrying within this request won't
+      // help - the suggested wait is usually minutes to hours, way past
+      // any serverless function timeout, and every extra attempt just
+      // burns more of the little quota that might be left. Surface it
+      // immediately with the real wait time instead of silently spinning
+      // through maxRetries on a fallback delay that can never succeed.
+      if (isDailyLimitError(message)) {
+        const minutes = Math.ceil(waitMs / 60000);
+        throw new Error(
+          `Groq's daily token limit for this model is used up for today. Try again in about ${minutes} minute(s), or upgrade at console.groq.com/settings/billing for a higher daily cap.`
+        );
+      }
+
       onRetry?.(attempt + 1, waitMs, message);
       await sleep(waitMs);
     }

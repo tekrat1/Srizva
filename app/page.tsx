@@ -8,27 +8,30 @@ export default async function LandingPage() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-void">
+      {/* Background animation — untouched, same AuthAura as before */}
       <div className="absolute inset-0 h-[900px]">
         <AuthAura />
       </div>
+      {/* Glitch Drop overlay: CRT scanlines drifting above the aurora
+          background, below the content */}
+      <div className="glitch-drop-scanlines" />
 
       <div className="relative z-10">
         <Navbar />
 
         <main className="mx-auto max-w-4xl px-6 py-28 text-center">
-          <span className="animate-fade-up mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-medium text-muted">
-            <span className="h-1.5 w-1.5 animate-twinkle rounded-full bg-aurora-cyan" />
+          <span className="glitch-drop-pill animate-fade-up mx-auto mb-6">
+            <i />
             Now streaming builds file-by-file
           </span>
 
-          <h1 className="animate-fade-up text-4xl font-bold tracking-tight sm:text-6xl [animation-delay:80ms]">
-            Imagine It.
-            <br />
-            <span className="text-gradient-aurora">
-              Srizva Builds It.
+          <h1 className="glitch-drop-h1 animate-fade-up mx-auto text-4xl sm:text-6xl [animation-delay:80ms]">
+            <span className="g-line" data-text="Imagine it.">
+              Imagine it.
             </span>
+            <span className="g-line accent">Srizva builds it.</span>
           </h1>
-          <p className="animate-fade-up mx-auto mt-6 max-w-xl text-lg text-muted [animation-delay:160ms]">
+          <p className="glitch-drop-body animate-fade-up mx-auto mt-6 max-w-xl text-lg [animation-delay:160ms]">
             An AI agent plans the project, breaks it into tasks, and writes
             every file - with a live, running preview right in your browser.
             No local setup required.
@@ -37,7 +40,7 @@ export default async function LandingPage() {
           <div className="animate-fade-up mt-10 flex items-center justify-center gap-4 [animation-delay:240ms]">
             <Link
               href={user ? "/dashboard" : "/sign-up"}
-              className="btn-aurora rounded-md px-6 py-3 font-medium text-white transition-[background-position] duration-500 hover:animate-shimmer"
+              className="glitch-drop-cta"
             >
               {user ? "Go to dashboard" : "Start building - it's free"}
             </Link>
