@@ -42,7 +42,7 @@ export default async function Navbar() {
           className="flex items-center gap-2.5 text-lg font-semibold tracking-tight"
         >
           <BrandMark size={28} animated={false} />
-          Buildify
+          Srizva
         </Link>
 
         <div className="flex items-center gap-4 text-sm">

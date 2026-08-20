@@ -15,7 +15,7 @@ export default function AuthLayout({
           className="mb-8 flex items-center gap-2.5 text-lg font-semibold tracking-tight animate-fade-up"
         >
           <BrandMark size={34} />
-          Buildify
+          Srizva
         </Link>
 
         <div className="w-full max-w-sm animate-pop-in rounded-2xl border border-white/10 bg-surface/70 p-8 shadow-[0_20px_70px_rgba(0,0,0,0.55)] backdrop-blur-xl">

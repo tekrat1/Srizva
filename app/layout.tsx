@@ -3,7 +3,7 @@ import "./globals.css";
 import { Toaster } from "sonner";
 
 export const metadata: Metadata = {
-  title: "Buildify - Describe it, get a live website",
+  title: "Srizva - Imagine It. Srizva Builds It.",
   description:
     "Type what you want to build. An AI agent plans, architects, and codes it for you - with a live preview, right in your browser.",
 };

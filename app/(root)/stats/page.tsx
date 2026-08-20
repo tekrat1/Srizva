@@ -47,7 +47,7 @@ export default async function StatsPage() {
           Your <span className="text-gradient-aurora">hydration</span> stats
         </h1>
         <p className="mt-2 max-w-md text-sm text-muted">
-          Every build, edit, and (imaginary) mL of water you&apos;ve spent building with Buildify.
+          Every build, edit, and (imaginary) mL of water you&apos;ve spent building with Srizva.
         </p>
       </div>
 

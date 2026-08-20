@@ -203,7 +203,7 @@ function drawReceipt(canvas: HTMLCanvasElement, data: ReceiptData) {
   ctx.fillText("THANK YOU FOR BUILDING", CARD_WIDTH / 2, y);
   y += 20;
   ctx.font = "400 11px 'Courier New', monospace";
-  ctx.fillText("getvoxora — er, buildify.app", CARD_WIDTH / 2, y);
+  ctx.fillText("srizva.app", CARD_WIDTH / 2, y);
 }
 
 export default function ReceiptCard({ data }: { data: ReceiptData }) {
@@ -237,12 +237,12 @@ export default function ReceiptCard({ data }: { data: ReceiptData }) {
     if (!canvas) return;
     canvas.toBlob(async (blob) => {
       if (!blob) return;
-      const file = new File([blob], "buildify-receipt.png", { type: "image/png" });
+      const file = new File([blob], "srizva-receipt.png", { type: "image/png" });
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
         try {
           await navigator.share({
             files: [file],
-            title: "My Buildify receipt",
+            title: "My Srizva receipt",
             text: `I just built "${data.appName}" and used ${data.waterMl} mL of water doing it 💧`,
           });
         } catch {

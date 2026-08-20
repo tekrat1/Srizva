@@ -22,10 +22,10 @@ export default async function LandingPage() {
           </span>
 
           <h1 className="animate-fade-up text-4xl font-bold tracking-tight sm:text-6xl [animation-delay:80ms]">
-            Describe your website.
+            Imagine It.
             <br />
             <span className="text-gradient-aurora">
-              Watch it get built live.
+              Srizva Builds It.
             </span>
           </h1>
           <p className="animate-fade-up mx-auto mt-6 max-w-xl text-lg text-muted [animation-delay:160ms]">

@@ -1,4 +1,6 @@
-# Buildify
+# Srizva
+
+**Imagine It. Srizva Builds It.**
 
 Describe a website in plain English. An AI agent plans it, breaks it into
 build tasks, writes every file, and shows it running live — right in your

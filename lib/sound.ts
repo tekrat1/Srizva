@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-const STORAGE_KEY = "buildify:sound-enabled";
-const CHANGE_EVENT = "buildify:sound-changed";
+const STORAGE_KEY = "srizva:sound-enabled";
+const CHANGE_EVENT = "srizva:sound-changed";
 
 export function isSoundEnabled(): boolean {
   if (typeof window === "undefined") return true;

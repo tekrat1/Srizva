@@ -13,9 +13,9 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { shareId } = await params;
   const project = await getPublicProject(shareId);
-  if (!project) return { title: "Shared build — Buildify" };
+  if (!project) return { title: "Shared build — Srizva" };
   return {
-    title: `${project.plan.name} — built with Buildify`,
+    title: `${project.plan.name} — built with Srizva`,
     description: project.plan.description,
   };
 }
@@ -36,7 +36,7 @@ export default async function SharedProjectPage({
         <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
             <BrandMark size={28} animated={false} />
-            Buildify
+            Srizva
           </Link>
           <Link
             href="/sign-up"
@@ -64,7 +64,7 @@ export default async function SharedProjectPage({
         <p className="text-center text-xs text-muted">
           Built from a one-line prompt with{" "}
           <Link href="/" className="text-aurora-cyan hover:underline">
-            Buildify
+            Srizva
           </Link>
           .
         </p>
