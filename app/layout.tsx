@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import "./globals.css";
 import { Toaster } from "sonner";
 import CookieConsentBanner from "@/components/CookieConsentBanner";
+import RouteProgress from "@/components/RouteProgress";
 
 export const metadata: Metadata = {
   title: "Srizva - Imagine It. Srizva Builds It.",
@@ -34,6 +36,9 @@ export default function RootLayout({
         />
       </head>
       <body>
+        <Suspense fallback={null}>
+          <RouteProgress />
+        </Suspense>
         {children}
         <Toaster theme="dark" position="top-center" />
         <CookieConsentBanner />

@@ -23,6 +23,7 @@ import {
 import { auth } from "@/lib/firebase/client";
 import { createSessionCookie } from "@/lib/actions/auth";
 import { completeOnboarding, type Theme } from "@/lib/actions/onboarding";
+import { startNavProgress } from "@/lib/navProgress";
 import BrandMark from "@/components/auth/BrandMark";
 
 const ROLES = [
@@ -101,6 +102,7 @@ export default function OnboardingWizard({
         return;
       }
 
+      startNavProgress();
       router.push("/dashboard");
       router.refresh();
     } catch (err) {

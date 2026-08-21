@@ -45,14 +45,14 @@ export default function DiffReviewPanel({
           <button
             onClick={onDiscard}
             disabled={applying}
-            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-white/5 disabled:pointer-events-none disabled:opacity-50"
+            className="tap flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-white/5 disabled:pointer-events-none disabled:opacity-50"
           >
             <X className="h-3.5 w-3.5" /> Discard
           </button>
           <button
             onClick={onAccept}
             disabled={applying}
-            className="flex items-center gap-1.5 rounded-lg bg-emerald-500/20 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500/30 disabled:pointer-events-none disabled:opacity-50"
+            className="tap flex items-center gap-1.5 rounded-lg bg-emerald-500/20 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500/30 disabled:pointer-events-none disabled:opacity-50"
           >
             {applying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
             Apply changes
@@ -70,7 +70,7 @@ export default function DiffReviewPanel({
             <div key={change.path}>
               <button
                 onClick={() => toggle(change.path)}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-white/[0.03]"
+                className="tap flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-white/[0.03]"
               >
                 {open ? (
                   <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted" />

@@ -415,7 +415,7 @@ export default function GenerationWorkbench({
         <button
           type="submit"
           disabled={phase === "generating" || !prompt.trim() || locked}
-          className="btn-aurora relative flex items-center gap-2 overflow-hidden rounded-xl px-5 py-3 text-sm font-medium text-white shadow-[0_4px_20px_rgba(139,92,246,0.35)] transition-transform hover:scale-[1.02] disabled:pointer-events-none disabled:opacity-50"
+          className="tap btn-aurora relative flex items-center gap-2 overflow-hidden rounded-xl px-5 py-3 text-sm font-medium text-white shadow-[0_4px_20px_rgba(139,92,246,0.35)] transition-transform hover:scale-[1.02] disabled:pointer-events-none disabled:opacity-50"
         >
           {phase === "generating" && (
             <span className="absolute inset-0 animate-shimmer bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.25),transparent)] bg-[length:200%_100%]" />
@@ -489,7 +489,7 @@ export default function GenerationWorkbench({
                 <button
                   key={v}
                   onClick={() => setView(v)}
-                  className={`rounded-lg px-3 py-1 text-xs capitalize transition-colors ${
+                  className={`tap rounded-lg px-3 py-1 text-xs capitalize transition-colors ${
                     view === v
                       ? "bg-gradient-to-r from-aurora-violet/25 to-aurora-cyan/20 text-foreground"
                       : "text-muted hover:text-foreground"
@@ -535,7 +535,7 @@ export default function GenerationWorkbench({
           <button
             type="submit"
             disabled={phase === "editing" || !editInstruction.trim() || locked}
-            className="flex items-center gap-2 rounded-xl border border-border px-5 py-3 text-sm font-medium transition-colors hover:border-aurora-cyan/50 hover:bg-surface disabled:pointer-events-none disabled:opacity-50"
+            className="tap flex items-center gap-2 rounded-xl border border-border px-5 py-3 text-sm font-medium transition-colors hover:border-aurora-cyan/50 hover:bg-surface disabled:pointer-events-none disabled:opacity-50"
           >
             {locked ? <Lock className="h-4 w-4" /> : phase === "editing" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {locked ? "Locked" : "Apply edit"}

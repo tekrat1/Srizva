@@ -51,7 +51,7 @@ export default function ShareButton({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className={`flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs transition-colors hover:bg-white/5 ${
+        className={`tap flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs transition-colors hover:bg-white/5 ${
           isPublic ? "text-aurora-cyan" : ""
         }`}
       >
@@ -74,7 +74,7 @@ export default function ShareButton({
               type="button"
               disabled={isPending}
               onClick={() => toggleSharing(!isPublic)}
-              className={`relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+              className={`tap relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
                 isPublic ? "bg-aurora-violet" : "bg-white/15"
               }`}
             >
@@ -98,7 +98,7 @@ export default function ShareButton({
                 type="button"
                 onClick={copyLink}
                 title="Copy link"
-                className="flex shrink-0 items-center justify-center rounded-md border border-border p-1.5 hover:bg-white/5"
+                className="tap flex shrink-0 items-center justify-center rounded-md border border-border p-1.5 transition-colors hover:bg-white/5"
               >
                 {copied ? (
                   <Check className="h-3.5 w-3.5 text-emerald-400" />

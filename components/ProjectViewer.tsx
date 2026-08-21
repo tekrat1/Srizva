@@ -231,7 +231,7 @@ export default function ProjectViewer({
               <button
                 key={v}
                 onClick={() => setView(v)}
-                className={`rounded px-3 py-1 text-xs capitalize ${
+                className={`tap rounded px-3 py-1 text-xs capitalize transition-colors ${
                   view === v ? "bg-primary/20 text-foreground" : "text-muted hover:text-foreground"
                 }`}
               >
@@ -298,7 +298,7 @@ export default function ProjectViewer({
         <button
           type="submit"
           disabled={editing || !editInstruction.trim() || locked}
-          className="flex items-center gap-2 rounded-md border border-border px-5 py-3 text-sm font-medium hover:bg-surface disabled:opacity-50"
+          className="tap flex items-center gap-2 rounded-md border border-border px-5 py-3 text-sm font-medium transition-colors hover:bg-surface disabled:opacity-50"
         >
           {locked ? <Lock className="h-4 w-4" /> : editing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           {locked ? "Locked" : "Apply edit"}

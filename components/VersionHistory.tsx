@@ -56,7 +56,7 @@ export default function VersionHistory({
     <div className="overflow-hidden rounded-xl border border-border">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between px-3 py-2.5 text-xs font-medium transition-colors hover:bg-white/[0.02]"
+        className="tap flex w-full items-center justify-between px-3 py-2.5 text-xs font-medium transition-colors hover:bg-white/[0.02]"
       >
         <span className="flex items-center gap-2">
           <History className="h-3.5 w-3.5 text-muted" />
@@ -100,7 +100,7 @@ export default function VersionHistory({
                   <button
                     onClick={() => handleRestore(v.id)}
                     disabled={restoringId !== null}
-                    className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] transition-colors hover:bg-white/5 disabled:pointer-events-none disabled:opacity-50"
+                    className="tap flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] transition-colors hover:bg-white/5 disabled:pointer-events-none disabled:opacity-50"
                   >
                     {restoringId === v.id ? (
                       <Loader2 className="h-3 w-3 animate-spin" />

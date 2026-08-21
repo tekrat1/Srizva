@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
 import { auth } from "@/lib/firebase/client";
 import { createSessionCookie } from "@/lib/actions/auth";
+import { startNavProgress } from "@/lib/navProgress";
 import PasswordStrengthMeter from "@/components/auth/PasswordStrengthMeter";
 
 export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
@@ -62,9 +63,11 @@ export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
         // Brand-new account — walk them through the step-by-step
         // onboarding (style, name, role, company size) before they
         // land on the dashboard.
+        startNavProgress();
         router.push("/onboarding");
       } else {
         const redirect = searchParams.get("redirect") || "/dashboard";
+        startNavProgress();
         router.push(redirect);
       }
       router.refresh();
@@ -100,9 +103,11 @@ export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
       if (isNewUser) {
         // First time we've seen this Google account — same onboarding
         // flow as a fresh email sign-up.
+        startNavProgress();
         router.push("/onboarding");
       } else {
         const redirect = searchParams.get("redirect") || "/dashboard";
+        startNavProgress();
         router.push(redirect);
       }
       router.refresh();

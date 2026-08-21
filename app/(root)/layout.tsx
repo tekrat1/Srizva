@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import Navbar from "@/components/Navbar";
 import VerifyEmailBanner from "@/components/auth/VerifyEmailBanner";
+import RouteFade from "@/components/RouteFade";
 import { getCurrentUser } from "@/lib/actions/auth";
 
 export default async function RootGroupLayout({
@@ -17,7 +18,7 @@ export default async function RootGroupLayout({
       <Navbar />
       <main className="mx-auto max-w-6xl px-6 py-10">
         {showVerifyBanner && <VerifyEmailBanner email={user!.email} />}
-        {children}
+        <RouteFade>{children}</RouteFade>
       </main>
     </div>
   );

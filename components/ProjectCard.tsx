@@ -42,8 +42,8 @@ export default function ProjectCard({
   }
 
   return (
-    <div className="group relative rounded-lg border border-border bg-surface p-4 hover:border-primary">
-      <Link href={`/project/${id}`} className="block pr-8">
+    <div className="group relative rounded-lg border border-border bg-surface p-4 transition-colors duration-200 hover:border-primary">
+      <Link href={`/project/${id}`} className="tap block pr-8">
         <p className="truncate font-medium">{name}</p>
         <p className="mt-1 line-clamp-2 text-xs text-muted">{prompt}</p>
       </Link>
@@ -53,7 +53,7 @@ export default function ProjectCard({
         onBlur={() => setConfirming(false)}
         disabled={isPending}
         title={confirming ? "Click again to confirm delete" : "Delete project"}
-        className={`absolute right-3 top-3 rounded-md p-1.5 text-muted opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 disabled:opacity-100 ${
+        className={`tap absolute right-3 top-3 rounded-md p-1.5 text-muted opacity-0 transition-all hover:text-foreground group-hover:opacity-100 disabled:opacity-100 ${
           confirming ? "bg-red-500/20 text-red-400 opacity-100" : "hover:bg-white/10"
         }`}
       >
