@@ -2,6 +2,7 @@ import GenerationWorkbench from "@/components/GenerationWorkbench";
 import ProjectCard from "@/components/ProjectCard";
 import { listMyProjects } from "@/lib/actions/projects";
 import { getCurrentUser } from "@/lib/actions/auth";
+import { getUsageStatus } from "@/lib/actions/rate-limit";
 
 export default async function DashboardPage() {
   const [projects, user] = await Promise.all([
@@ -9,6 +10,7 @@ export default async function DashboardPage() {
     getCurrentUser(),
   ]);
   const firstName = user?.name?.split(" ")[0];
+  const usage = user ? await getUsageStatus(user.uid) : null;
 
   return (
     <div className="space-y-12">
@@ -38,7 +40,10 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <GenerationWorkbench />
+      <GenerationWorkbench
+        initialLocked={usage?.locked ?? false}
+        initialResetsInMs={usage?.resetsInMs ?? null}
+      />
 
       {projects.length > 0 && (
         <div>

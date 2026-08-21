@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { generateProject } from "@/lib/agent/run";
 import { getCurrentUser } from "@/lib/actions/auth";
+import { checkBuildLimit } from "@/lib/actions/rate-limit";
 import type { GenerationEvent } from "@/lib/agent/types";
 import { isProviderConfigured, requiredEnvVarName } from "@/lib/agent/groq";
 
@@ -27,6 +28,18 @@ export async function POST(req: NextRequest) {
     return new Response(
       JSON.stringify({ error: `Server is missing ${requiredEnvVarName}` }),
       { status: 500 }
+    );
+  }
+
+  const limit = await checkBuildLimit(user.uid);
+  if (!limit.allowed) {
+    return new Response(
+      JSON.stringify({
+        error: "Daily build limit reached. Come back tomorrow.",
+        locked: true,
+        resetsInMs: limit.resetsInMs,
+      }),
+      { status: 429 }
     );
   }
 

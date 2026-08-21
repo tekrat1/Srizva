@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
+import { Loader2, ShieldCheck, ShieldAlert, Lock } from "lucide-react";
 import { toast } from "sonner";
 import type { Plan, UsageTotals, VirtualFS } from "@/lib/agent/types";
 import { updateProject } from "@/lib/actions/projects";
@@ -19,18 +19,25 @@ export default function ProjectViewer({
   files: initialFiles,
   isPublic,
   shareId,
+  initialLocked = false,
+  initialResetsInMs = null,
 }: {
   id: string;
   plan: Plan;
   files: VirtualFS;
   isPublic?: boolean;
   shareId?: string;
+  initialLocked?: boolean;
+  initialResetsInMs?: number | null;
 }) {
   const [view, setView] = useState<"preview" | "code">("preview");
   const [plan, setPlan] = useState<Plan>(initialPlan);
   const [files, setFiles] = useState<VirtualFS>(initialFiles);
   const [editInstruction, setEditInstruction] = useState("");
   const [editing, setEditing] = useState(false);
+  const [locked, setLocked] = useState(initialLocked);
+  // Kept for potential future "resets in Xh" messaging.
+  void initialResetsInMs;
   const [applying, setApplying] = useState(false);
   const [log, setLog] = useState<string[]>([]);
   const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
@@ -62,7 +69,8 @@ export default function ProjectViewer({
     setView("preview");
     setLog([]);
     setPendingChanges([]);
-  }, [id, initialFiles, initialPlan]);
+    setLocked(initialLocked);
+  }, [id, initialFiles, initialPlan, initialLocked]);
 
   function appendLog(line: string) {
     setLog((prev) => [...prev, line]);
@@ -70,7 +78,7 @@ export default function ProjectViewer({
 
   async function handleEdit(e: React.FormEvent) {
     e.preventDefault();
-    if (!editInstruction.trim() || editing) return;
+    if (!editInstruction.trim() || editing || locked) return;
 
     setEditing(true);
     setLog([]);
@@ -91,6 +99,9 @@ export default function ProjectViewer({
 
       if (!res.ok || !res.body) {
         const body = await res.json().catch(() => ({}));
+        if (res.status === 429 || body.locked) {
+          setLocked(true);
+        }
         throw new Error(body.error || "Failed to apply edit");
       }
 
@@ -143,6 +154,7 @@ export default function ProjectViewer({
                 `Draft ready — review ${pending.length} changed file${pending.length === 1 ? "" : "s"} below.`
               );
               editUsageRef.current = event.usage;
+              setLocked(true);
               break;
             case "error":
               appendLog(`Error: ${event.message}`);
@@ -265,21 +277,31 @@ export default function ProjectViewer({
         />
       )}
 
+      {locked && (
+        <div className="flex items-center gap-2.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-400">
+          <Lock className="h-4 w-4 shrink-0" />
+          <span>
+            You&apos;ve used today&apos;s build. Generating and editing are both locked until
+            tomorrow — come back then.
+          </span>
+        </div>
+      )}
+
       <form onSubmit={handleEdit} className="flex gap-2">
         <input
           value={editInstruction}
           onChange={(e) => setEditInstruction(e.target.value)}
           placeholder="e.g. Make the add button blue and round the corners"
-          disabled={editing}
+          disabled={editing || locked}
           className="flex-1 rounded-md border border-border bg-surface px-4 py-3 text-sm outline-none focus:border-primary disabled:opacity-50"
         />
         <button
           type="submit"
-          disabled={editing || !editInstruction.trim()}
+          disabled={editing || !editInstruction.trim() || locked}
           className="flex items-center gap-2 rounded-md border border-border px-5 py-3 text-sm font-medium hover:bg-surface disabled:opacity-50"
         >
-          {editing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          Apply edit
+          {locked ? <Lock className="h-4 w-4" /> : editing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {locked ? "Locked" : "Apply edit"}
         </button>
       </form>
 

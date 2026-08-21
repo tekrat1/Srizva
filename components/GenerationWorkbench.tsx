@@ -13,6 +13,7 @@ import {
   ClipboardList,
   ShieldCheck,
   ShieldAlert,
+  Lock,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { GenerationEvent, Plan, UsageTotals, VirtualFS } from "@/lib/agent/types";
@@ -51,8 +52,31 @@ function logLineMeta(line: string) {
   return { Icon: Loader2, className: "text-muted" };
 }
 
-export default function GenerationWorkbench() {
+/** Shown once today's single build (generate OR edit) has been used up. */
+function DailyLockBanner() {
+  return (
+    <div className="flex items-center gap-2.5 rounded-xl border border-aurora-amber/30 bg-aurora-amber/10 px-4 py-3 text-sm text-aurora-amber">
+      <Lock className="h-4 w-4 shrink-0" />
+      <span>
+        You&apos;ve used today&apos;s build. Generating and editing are both locked until
+        tomorrow to keep things sustainable — come back then.
+      </span>
+    </div>
+  );
+}
+
+export default function GenerationWorkbench({
+  initialLocked = false,
+  initialResetsInMs = null,
+}: {
+  initialLocked?: boolean;
+  initialResetsInMs?: number | null;
+}) {
   const router = useRouter();
+  const [locked, setLocked] = useState(initialLocked);
+  // Kept for potential future "resets in Xh" messaging; not currently
+  // rendered to avoid drifting out of sync with the server clock.
+  void initialResetsInMs;
   const [prompt, setPrompt] = useState("");
   const [turboMode, setTurboMode] = useState(false);
   const [editInstruction, setEditInstruction] = useState("");
@@ -93,7 +117,7 @@ export default function GenerationWorkbench() {
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
-    if (!prompt.trim() || phase === "generating") return;
+    if (!prompt.trim() || phase === "generating" || locked) return;
 
     setPhase("generating");
     setLog([]);
@@ -117,6 +141,9 @@ export default function GenerationWorkbench() {
 
       if (!res.ok || !res.body) {
         const body = await res.json().catch(() => ({}));
+        if (res.status === 429 || body.locked) {
+          setLocked(true);
+        }
         throw new Error(body.error || "Failed to start generation");
       }
 
@@ -175,6 +202,7 @@ export default function GenerationWorkbench() {
             case "done":
               appendLog("Done. Preview is booting...");
               setPhase("done");
+              setLocked(true);
               playSplash();
               setReceipt({
                 appName: finalPlan?.name ?? "Your app",
@@ -217,7 +245,7 @@ export default function GenerationWorkbench() {
 
   async function handleEdit(e: React.FormEvent) {
     e.preventDefault();
-    if (!editInstruction.trim() || !plan || phase === "editing") return;
+    if (!editInstruction.trim() || !plan || phase === "editing" || locked) return;
 
     setPhase("editing");
     setTotalFiles(0);
@@ -240,6 +268,9 @@ export default function GenerationWorkbench() {
 
       if (!res.ok || !res.body) {
         const body = await res.json().catch(() => ({}));
+        if (res.status === 429 || body.locked) {
+          setLocked(true);
+        }
         throw new Error(body.error || "Failed to apply edit");
       }
 
@@ -296,6 +327,7 @@ export default function GenerationWorkbench() {
               );
               editUsageRef.current = event.usage;
               setPhase("done");
+              setLocked(true);
               playSplash();
               break;
             case "error":
@@ -367,6 +399,8 @@ export default function GenerationWorkbench() {
         <WaterBottle progress={bottleLevel} phase={phase} />
       </div>
 
+      {locked && <DailyLockBanner />}
+
       <form onSubmit={handleGenerate} className="group relative flex gap-2">
         <div className="relative flex-1">
           <Wand2 className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted transition-colors group-focus-within:text-aurora-violet" />
@@ -374,24 +408,26 @@ export default function GenerationWorkbench() {
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="e.g. A pomodoro timer app with a clean minimal UI"
-            disabled={phase === "generating"}
+            disabled={phase === "generating" || locked}
             className="w-full rounded-xl border border-border bg-surface py-3 pl-10 pr-4 text-sm outline-none transition-shadow focus:border-aurora-violet/60 focus:shadow-[0_0_0_4px_rgba(139,92,246,0.15)] disabled:opacity-50"
           />
         </div>
         <button
           type="submit"
-          disabled={phase === "generating" || !prompt.trim()}
+          disabled={phase === "generating" || !prompt.trim() || locked}
           className="btn-aurora relative flex items-center gap-2 overflow-hidden rounded-xl px-5 py-3 text-sm font-medium text-white shadow-[0_4px_20px_rgba(139,92,246,0.35)] transition-transform hover:scale-[1.02] disabled:pointer-events-none disabled:opacity-50"
         >
           {phase === "generating" && (
             <span className="absolute inset-0 animate-shimmer bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.25),transparent)] bg-[length:200%_100%]" />
           )}
-          {phase === "generating" ? (
+          {locked ? (
+            <Lock className="h-4 w-4" />
+          ) : phase === "generating" ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
             <Sparkles className="h-4 w-4" />
           )}
-          <span className="relative">Generate</span>
+          <span className="relative">{locked ? "Locked" : "Generate"}</span>
         </button>
       </form>
 
@@ -399,7 +435,7 @@ export default function GenerationWorkbench() {
         <input
           type="checkbox"
           checked={turboMode}
-          disabled={phase === "generating"}
+          disabled={phase === "generating" || locked}
           onChange={(e) => setTurboMode(e.target.checked)}
           className="h-3.5 w-3.5 rounded border-border accent-aurora-violet disabled:opacity-50"
         />
@@ -493,16 +529,16 @@ export default function GenerationWorkbench() {
             value={editInstruction}
             onChange={(e) => setEditInstruction(e.target.value)}
             placeholder="e.g. Make the add button blue and round the corners"
-            disabled={phase === "editing"}
+            disabled={phase === "editing" || locked}
             className="flex-1 rounded-xl border border-border bg-surface px-4 py-3 text-sm outline-none transition-shadow focus:border-aurora-cyan/60 focus:shadow-[0_0_0_4px_rgba(34,211,238,0.12)] disabled:opacity-50"
           />
           <button
             type="submit"
-            disabled={phase === "editing" || !editInstruction.trim()}
+            disabled={phase === "editing" || !editInstruction.trim() || locked}
             className="flex items-center gap-2 rounded-xl border border-border px-5 py-3 text-sm font-medium transition-colors hover:border-aurora-cyan/50 hover:bg-surface disabled:pointer-events-none disabled:opacity-50"
           >
-            {phase === "editing" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Apply edit
+            {locked ? <Lock className="h-4 w-4" /> : phase === "editing" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {locked ? "Locked" : "Apply edit"}
           </button>
         </form>
       )}

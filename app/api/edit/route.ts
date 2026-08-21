@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/actions/auth";
-import { checkEditLimit } from "@/lib/actions/rate-limit";
+import { checkBuildLimit } from "@/lib/actions/rate-limit";
 import { runEditGraph } from "@/lib/agent/graph/editGraph";
 import type { Plan, VirtualFS } from "@/lib/agent/types";
 import { isProviderConfigured, requiredEnvVarName } from "@/lib/agent/groq";
@@ -31,10 +31,14 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: `Server is missing ${requiredEnvVarName}` }), { status: 500 });
   }
 
-  const limit = await checkEditLimit(user.uid);
+  const limit = await checkBuildLimit(user.uid);
   if (!limit.allowed) {
     return new Response(
-      JSON.stringify({ error: "Daily edit limit reached. Try again tomorrow." }),
+      JSON.stringify({
+        error: "Daily build limit reached. Come back tomorrow.",
+        locked: true,
+        resetsInMs: limit.resetsInMs,
+      }),
       { status: 429 }
     );
   }
